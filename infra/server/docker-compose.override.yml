@@ -1,0 +1,53 @@
+# Дополнения PRO Инсульт к стандартной сборке Supabase (self-hosted/v0.8.3).
+# Кладётся рядом с их docker-compose.yml; docker compose подхватывает его автоматически.
+
+services:
+  auth:
+    environment:
+      # Вход только по телефону; код приходит в СМС через функцию public.send_sms_hook (supabase/sms-hook.sql).
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "true"
+      GOTRUE_SMS_AUTOCONFIRM: "false"
+      # Провайдер формально обязателен, но при включённом хуке не используется.
+      GOTRUE_SMS_PROVIDER: twilio
+      GOTRUE_SMS_TWILIO_ACCOUNT_SID: ACunused000000000000000000000000000
+      GOTRUE_SMS_TWILIO_AUTH_TOKEN: unused
+      GOTRUE_SMS_TWILIO_MESSAGE_SERVICE_SID: MGunused00000000000000000000000000
+      GOTRUE_SMS_OTP_LENGTH: "6"
+      GOTRUE_SMS_OTP_EXP: "300"
+      GOTRUE_SMS_MAX_FREQUENCY: "60s"
+      GOTRUE_RATE_LIMIT_SMS_SENT: "30"
+      GOTRUE_HOOK_SEND_SMS_ENABLED: "true"
+      GOTRUE_HOOK_SEND_SMS_URI: "pg-functions://postgres/public/send_sms_hook"
+      # Тестовые номера без СМС (для проверок и демонстраций).
+      GOTRUE_SMS_TEST_OTP: "79990000001:111111,79990000002:222222,79990000003:333333,79990000004:444444"
+      GOTRUE_SMS_TEST_OTP_VALID_UNTIL: "2027-12-31T00:00:00Z"
+
+  # Шлюз API и пул подключений к базе доступны только на самом сервере; наружу — через Caddy (HTTPS).
+  api-gw:
+    ports: !override
+      - "127.0.0.1:8000:8000/tcp"
+  supavisor:
+    ports: !override
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:6543:6543"
+
+  # HTTPS с бесплатным сертификатом Let's Encrypt, который Caddy получает и продлевает сам.
+  caddy:
+    image: caddy:2
+    container_name: pro-insult-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${PRO_INSULT_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api-gw
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
