@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Sect, TabScreen, useSoon } from '../../../components/Shell';
+import { PageHeader, Sect, TabScreen, useSoon } from '../../../components/Shell';
 import { Grad } from '../../../components/ui';
 import { doctors, features, partners } from '../../../lib/demo';
 import { useTheme } from '../../../theme/ThemeContext';
@@ -11,7 +11,7 @@ export default function Shop() {
   const { c } = useTheme();
   const soon = useSoon();
   return (
-    <TabScreen>
+    <TabScreen header={<PageHeader title="Покупки" />}>
       <Grad style={styles.plan}>
         <Text style={styles.eyebrow}>ВАШ ТАРИФ</Text>
         <Text style={styles.planTitle}>Базовый</Text>
@@ -79,7 +79,7 @@ export default function Shop() {
 }
 
 const styles = StyleSheet.create({
-  plan: { borderRadius: radius.m, paddingHorizontal: 18, paddingVertical: 20, marginTop: 4 },
+  plan: { borderRadius: radius.m, paddingHorizontal: 18, paddingVertical: 20 },
   eyebrow: { color: '#fff', opacity: 0.8, fontFamily: fonts.body700, fontSize: 11.5, letterSpacing: 1.5 },
   planTitle: { color: '#fff', fontFamily: fonts.head700, fontSize: 24, marginTop: 7, marginBottom: 6 },
   planText: { color: '#fff', opacity: 0.92, fontFamily: fonts.body500, fontSize: 14, lineHeight: 20, marginBottom: 15 },

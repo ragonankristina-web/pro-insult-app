@@ -23,7 +23,9 @@ export function DevLogin({ current }: { current?: Role }) {
     const err = await devSignIn(role);
     setBusy(null);
     if (err) setError(err);
-    else router.replace('/home');
+    // Со стартового экрана — новым шагом истории (кнопка «назад» вернёт сюда); из профиля — заменой.
+    else if (current) router.replace('/home');
+    else router.push('/home');
   };
   return (
     <View style={[styles.dev, { borderColor: c.line }]}>

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AiRail, TabScreen, useSoon } from '../../../components/Shell';
+import { AiRail, PageHeader, TabScreen, useSoon } from '../../../components/Shell';
 import { Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
 import { lessonBlocks } from '../../../lib/demo';
@@ -14,10 +14,11 @@ export default function Lessons() {
   const soon = useSoon();
   const doctor = profile?.role === 'doctor';
   return (
-    <TabScreen overlay={doctor ? null : <AiRail />} contentStyle={doctor ? null : { paddingRight: 62 }}>
-      <Text style={[styles.title, { color: c.ink }]} accessibilityRole="header">
-        {doctor ? 'Программа пациента · пример' : 'Занятия на сегодня'}
-      </Text>
+    <TabScreen
+      header={<PageHeader title={doctor ? 'Программа пациента · пример' : 'Занятия на сегодня'} />}
+      overlay={doctor ? null : <AiRail />}
+      contentStyle={doctor ? null : { paddingRight: 62 }}
+    >
       {doctor ? (
         <Notice tone="info">Здесь врач будет назначать и менять упражнения пациента.</Notice>
       ) : null}
@@ -60,7 +61,6 @@ export default function Lessons() {
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: fonts.head700, fontSize: 20, marginTop: 4 },
   block: { borderRadius: radius.m, padding: 14 },
   tag: { alignSelf: 'flex-start', borderRadius: radius.pill, paddingHorizontal: 15, paddingVertical: 7, marginBottom: 11 },
   tagText: { fontFamily: fonts.head700, fontSize: 13, letterSpacing: 0.9 },

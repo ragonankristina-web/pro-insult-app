@@ -56,7 +56,7 @@ export default function Home() {
           <View style={styles.ctarow}>
             <Button
               title={role === 'caregiver' ? 'Открыть занятия' : 'Начать занятие'}
-              onPress={() => router.replace('/lessons')}
+              onPress={() => router.push('/lessons')}
               style={{ flex: 1 }}
             />
             <AiDot />
@@ -81,7 +81,7 @@ function ChartsCard({ pinned }: { pinned: boolean }) {
     <View style={[styles.charts, pinned && { marginTop: 'auto' }, { backgroundColor: c.pink }]}>
       <View style={[styles.box, { backgroundColor: c.surface }]}>
         <Pressable
-          onPress={() => router.replace({ pathname: '/chat', params: { sub: 'stats' } })}
+          onPress={() => router.push({ pathname: '/chat', params: { sub: 'stats' } })}
           accessibilityRole="button"
           accessibilityLabel="Прогресс — открыть показатели"
           style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}

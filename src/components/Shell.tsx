@@ -68,7 +68,7 @@ export function TabBar() {
           return (
             <Pressable
               key={t.id}
-              onPress={() => !on && router.replace(`/${t.id}` as never)}
+              onPress={() => !on && router.push(`/${t.id}` as never)}
               accessibilityRole="tab"
               accessibilityState={{ selected: on }}
               accessibilityLabel={t.label.replace('\n', ' ')}
@@ -174,6 +174,17 @@ export function AiRail() {
   );
 }
 
+// ── заголовок вкладки без профиля: название и переключатель темы ──
+export function PageHeader({ title }: { title: string }) {
+  const { c } = useTheme();
+  return (
+    <View style={styles.pageHead}>
+      <Text style={[styles.pageTitle, { color: c.ink }]} accessibilityRole="header" numberOfLines={1}>{title}</Text>
+      <ThemeToggle />
+    </View>
+  );
+}
+
 // ── общий заголовок раздела ───────────────────────────────
 export function Sect({ children }: { children: ReactNode }) {
   const { c } = useTheme();
@@ -214,5 +225,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center' },
   railVert: { marginTop: 'auto', color: '#fff', fontFamily: fonts.body700, fontSize: 11, letterSpacing: 2, opacity: 0.85,
     transform: [{ rotate: '-90deg' }], width: 80, textAlign: 'center', marginBottom: 30 },
+  pageHead: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4, paddingBottom: 8, minHeight: 58 },
+  pageTitle: { flex: 1, fontFamily: fonts.head700, fontSize: 21 },
   sect: { fontFamily: fonts.head700, fontSize: 17, marginTop: 6 },
 });

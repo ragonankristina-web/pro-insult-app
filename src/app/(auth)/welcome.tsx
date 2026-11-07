@@ -1,4 +1,4 @@
-import { Redirect, router } from 'expo-router';
+import { router } from 'expo-router';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,7 +7,7 @@ import { Button, Notice } from '../../components/ui';
 import { DevLogin } from '../../components/DevLogin';
 import { useAuth } from '../../lib/Auth';
 import { devLoginEnabled } from '../../lib/dev';
-import { backendConfigured } from '../../lib/supabase';
+import { backendConfigured, roleInfo } from '../../lib/supabase';
 import { useTheme } from '../../theme/ThemeContext';
 import { fonts, radius } from '../../theme/tokens';
 
@@ -15,9 +15,9 @@ const logo = require('../../../assets/logo.png');
 
 export default function Welcome() {
   const { c } = useTheme();
-  const { session, ready } = useAuth();
+  const { session, profile, ready, signOut } = useAuth();
   const insets = useSafeAreaInsets();
-  if (session && ready) return <Redirect href="/" />;
+  const signedIn = Boolean(session && ready);
 
   return (
     <ScrollView
@@ -54,7 +54,26 @@ export default function Welcome() {
           {!backendConfigured ? (
             <Notice tone="error">Не настроено подключение к серверу: нет файла .env с адресом Supabase.</Notice>
           ) : null}
-          <Button title="Войти по номеру телефона" onPress={() => router.push('/phone')} disabled={!backendConfigured} />
+          {signedIn ? (
+            <View style={[styles.cont, { backgroundColor: c.pink2 }]}>
+              <Text style={[styles.contText, { color: c.pinkInk }]}>
+                {profile
+                  ? `Вы вошли: ${profile.full_name || 'без имени'} · ${roleInfo[profile.role].title.toLowerCase()}`
+                  : 'Вы вошли, но не закончили регистрацию'}
+              </Text>
+              <Button
+                title={profile ? 'Продолжить' : 'Продолжить регистрацию'}
+                onPress={() => router.push(profile ? '/home' : '/role')}
+              />
+              <Button title="Выйти из аккаунта" variant="text" onPress={signOut} />
+            </View>
+          ) : null}
+          <Button
+            title={signedIn ? 'Войти по другому номеру' : 'Войти по номеру телефона'}
+            variant={signedIn ? 'soft' : 'grad'}
+            onPress={() => router.push('/phone')}
+            disabled={!backendConfigured}
+          />
           {/* VK ID подключается после регистрации приложения на id.vk.com/business — до этого кнопка неактивна. */}
           <Button title="Войти через VK ID · скоро" variant="soft" disabled />
           <Text style={[styles.legal, { color: c.inkMute }]}>
@@ -80,5 +99,7 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, marginTop: 8 },
   pointText: { flex: 1, fontFamily: fonts.body500, fontSize: 15, lineHeight: 22 },
   actions: { marginTop: 'auto', paddingTop: 24, gap: 12 },
+  cont: { borderRadius: radius.m, padding: 14, gap: 10 },
+  contText: { fontFamily: fonts.body700, fontSize: 15, lineHeight: 21, textAlign: 'center' },
   legal: { fontFamily: fonts.body500, fontSize: 13, lineHeight: 19, textAlign: 'center' },
 });
