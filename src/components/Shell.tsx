@@ -185,6 +185,26 @@ export function PageHeader({ title }: { title: string }) {
   );
 }
 
+// ── заголовок экрана без нижнего меню: «назад», название, тема ──
+export function BackHeader({ title }: { title: string }) {
+  const { c } = useTheme();
+  return (
+    <View style={styles.pageHead}>
+      <Pressable
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+        accessibilityRole="button"
+        accessibilityLabel="Назад"
+        hitSlop={8}
+        style={[styles.backBtn, { backgroundColor: c.pink2 }]}
+      >
+        <Icon name="back" color={c.pinkInk} size={22} />
+      </Pressable>
+      <Text style={[styles.pageTitle, { color: c.ink }]} accessibilityRole="header" numberOfLines={1}>{title}</Text>
+      <ThemeToggle />
+    </View>
+  );
+}
+
 // ── общий заголовок раздела ───────────────────────────────
 export function Sect({ children }: { children: ReactNode }) {
   const { c } = useTheme();
@@ -227,5 +247,6 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-90deg' }], width: 80, textAlign: 'center', marginBottom: 30 },
   pageHead: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4, paddingBottom: 8, minHeight: 58 },
   pageTitle: { flex: 1, fontFamily: fonts.head700, fontSize: 21 },
+  backBtn: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   sect: { fontFamily: fonts.head700, fontSize: 17, marginTop: 6 },
 });

@@ -1,10 +1,9 @@
-import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemeToggle } from '../../components/AuthScreen';
 import { Icon } from '../../components/Icon';
+import { BackHeader } from '../../components/Shell';
 import { Grad } from '../../components/ui';
 import { dayByKey, dayKey, days, metricName, perDay, type Day, type Metric } from '../../lib/demo';
 import { useTheme } from '../../theme/ThemeContext';
@@ -55,21 +54,7 @@ export default function Calendar() {
       contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 28 }]}
     >
       <View style={styles.inner}>
-        <View style={styles.topline}>
-          <Pressable
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
-            accessibilityRole="button"
-            accessibilityLabel="Назад"
-            hitSlop={8}
-            style={[styles.iconBtn, { backgroundColor: c.pink2 }]}
-          >
-            <Icon name="back" color={c.pinkInk} size={22} />
-          </Pressable>
-          <Text style={[styles.title, { color: c.ink }]} accessibilityRole="header" numberOfLines={1}>
-            Календарь занятий
-          </Text>
-          <ThemeToggle />
-        </View>
+        <BackHeader title="Календарь занятий" />
 
         <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.line }]}>
           <View style={styles.monthRow}>
@@ -233,9 +218,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 const styles = StyleSheet.create({
   root: { flexGrow: 1, paddingHorizontal: 18 },
   inner: { width: '100%', maxWidth: 460, alignSelf: 'center', gap: 16 },
-  topline: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   iconBtn: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, fontFamily: fonts.head700, fontSize: 21 },
   card: { borderWidth: 1.5, borderRadius: radius.m, padding: 14, gap: 10 },
   monthRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   month: { fontFamily: fonts.head700, fontSize: 18 },

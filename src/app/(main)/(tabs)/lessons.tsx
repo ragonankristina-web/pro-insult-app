@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AiRail, PageHeader, TabScreen, useSoon } from '../../../components/Shell';
@@ -26,9 +27,23 @@ export default function Lessons() {
         const done = b.lessons.filter((l) => l.done).length;
         return (
           <View key={b.metric} style={[styles.block, { backgroundColor: c[b.metric] }]}>
-            <View style={[styles.tag, { backgroundColor: c.surface }]}>
-              <Text style={[styles.tagText, { color: c.ink }]}>{b.title.toUpperCase()}</Text>
-            </View>
+            {b.metric === 'speech' ? (
+              <Pressable
+                onPress={() => router.push('/speech' as never)}
+                accessibilityRole="button"
+                accessibilityLabel="Речь — все упражнения"
+                style={({ pressed }) => [styles.tag, { backgroundColor: c.surface, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={[styles.tagText, { color: c.ink }]}>
+                  {b.title.toUpperCase()}
+                  <Text style={{ color: c.magenta }}>{'  · все упражнения →'}</Text>
+                </Text>
+              </Pressable>
+            ) : (
+              <View style={[styles.tag, { backgroundColor: c.surface }]}>
+                <Text style={[styles.tagText, { color: c.ink }]}>{b.title.toUpperCase()}</Text>
+              </View>
+            )}
             <View style={styles.list}>
               {b.lessons.map((l, i) => (
                 <Pressable

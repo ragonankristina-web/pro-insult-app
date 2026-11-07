@@ -23,7 +23,15 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-video",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Камера нужна, чтобы проверять, как вы выполняете упражнения. Видео не записывается и никуда не отправляется.",
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "scheme": "proinsult",
     "experiments": {
