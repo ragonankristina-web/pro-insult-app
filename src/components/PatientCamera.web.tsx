@@ -2,42 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { Blend, CameraProps } from '../lib/exercises';
+import { loadFaceLandmarker, type FaceLandmarker } from '../lib/mediapipe';
 import { fonts } from '../theme/tokens';
 
-// Браузер: фронтальная камера и распознавание мимики MediaPipe Face Landmarker прямо на устройстве —
-// видео пациента никуда не отправляется, из сети загружается только сама модель (один раз).
-const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35';
-const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-
-type Landmarker = {
-  detectForVideo: (v: HTMLVideoElement, t: number) => {
-    faceBlendshapes?: { categories: { categoryName: string; score: number }[] }[];
-  };
-};
-
-// import() по адресу CDN прячем от сборщика — модуль грузится только в браузере и только здесь.
-const importUrl = new Function('u', 'return import(u)') as (u: string) => Promise<any>;
-let shared: Promise<Landmarker> | null = null;
-
-function loadLandmarker() {
-  shared ??= (async () => {
-    const { FaceLandmarker, FilesetResolver } = await importUrl(`${CDN}/vision_bundle.mjs`);
-    const files = await FilesetResolver.forVisionTasks(`${CDN}/wasm`);
-    const make = (delegate: 'GPU' | 'CPU') =>
-      FaceLandmarker.createFromOptions(files, {
-        baseOptions: { modelAssetPath: MODEL, delegate },
-        outputFaceBlendshapes: true,
-        runningMode: 'VIDEO',
-        numFaces: 1,
-      });
-    // Видеокарта быстрее, но доступна не во всех браузерах — тогда считаем на процессоре.
-    return make('GPU').catch(() => make('CPU'));
-  })().catch((e) => {
-    shared = null;
-    throw e;
-  });
-  return shared;
-}
+// Браузер: фронтальная камера и распознавание мимики (MediaPipe, на устройстве).
 
 type Status = 'starting' | 'model' | 'ready' | 'denied' | 'nomodel';
 
@@ -70,9 +38,9 @@ export function PatientCamera({ judge, onVerdict }: CameraProps) {
       if (!judge) return setStatus('ready');
 
       setStatus('model');
-      let landmarker: Landmarker;
+      let landmarker: FaceLandmarker;
       try {
-        landmarker = await loadLandmarker();
+        landmarker = await loadFaceLandmarker();
       } catch {
         if (!stopped) setStatus('nomodel');
         return;

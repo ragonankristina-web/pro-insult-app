@@ -4,9 +4,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AiRail, PageHeader, TabScreen, useSoon } from '../../../components/Shell';
 import { Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
-import { lessonBlocks } from '../../../lib/demo';
+import { lessonBlocks, type Metric } from '../../../lib/demo';
 import { useTheme } from '../../../theme/ThemeContext';
 import { fonts, radius } from '../../../theme/tokens';
+
+// Разделы, где уже есть свои упражнения: нажатие на ярлык блока открывает их список.
+const sections: Partial<Record<Metric, string>> = { speech: '/speech', think: '/think' };
 
 // Занятия на сегодня: блоки «Мышление», «Моторика», «Речь»; справа — панель ассистента.
 export default function Lessons() {
@@ -27,11 +30,11 @@ export default function Lessons() {
         const done = b.lessons.filter((l) => l.done).length;
         return (
           <View key={b.metric} style={[styles.block, { backgroundColor: c[b.metric] }]}>
-            {b.metric === 'speech' ? (
+            {sections[b.metric] ? (
               <Pressable
-                onPress={() => router.push('/speech' as never)}
+                onPress={() => router.push(sections[b.metric] as never)}
                 accessibilityRole="button"
-                accessibilityLabel="Речь — все упражнения"
+                accessibilityLabel={`${b.title} — все упражнения`}
                 style={({ pressed }) => [styles.tag, { backgroundColor: c.surface, opacity: pressed ? 0.8 : 1 }]}
               >
                 <Text style={[styles.tagText, { color: c.ink }]}>
