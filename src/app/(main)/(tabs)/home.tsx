@@ -108,15 +108,20 @@ function ChartsCard({ pinned }: { pinned: boolean }) {
           })}
         </View>
       </View>
-      <View style={[styles.box, { backgroundColor: c.surface }]}>
-        <Text style={[styles.h4, { color: c.ink }]}>Занятия</Text>
+      <Pressable
+        onPress={() => router.push('/calendar')}
+        accessibilityRole="button"
+        accessibilityLabel={`Занятия за неделю: ${done} из ${perDay * 7}. Открыть календарь`}
+        style={({ pressed }) => [styles.box, { backgroundColor: c.surface, opacity: pressed ? 0.8 : 1 }]}
+      >
+        <Text style={[styles.h4, { color: c.ink }]}>Занятия →</Text>
         <Text style={[styles.boxSub, { color: c.inkMute }]}>сделанные за неделю</Text>
         <WeekBars week={week} perDay={perDay} />
         <Text style={[styles.bignum, { color: c.heroNum }]}>
           {done}
           <Text style={[styles.bigSmall, { color: c.inkMute }]}>{` из ${perDay * 7}`}</Text>
         </Text>
-      </View>
+      </Pressable>
     </View>
   );
 }

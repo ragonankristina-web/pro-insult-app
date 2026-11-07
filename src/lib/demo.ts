@@ -1,17 +1,19 @@
 // Демо-данные из макета — до тех пор, пока занятия, оценки и чат не хранятся в базе.
 
 export type Metric = 'moto' | 'speech' | 'think';
-export type Day = Record<Metric, number> & { done: number };
+export type Day = Record<Metric, number> & { done: number; date: Date };
 
 export const metricName: Record<Metric, string> = { moto: 'моторика', speech: 'речь', think: 'мышление' };
 
 // 8 недель оценок по видам реабилитации и сделанных занятий (из 3 в день); генератор с фиксированным зерном.
+// Последний день — сегодня, поэтому календарь показывает данные на настоящих датах.
 function makeDays(): Day[] {
   let seed = 4417;
   const r = () => {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
     return seed / 0x7fffffff;
   };
+  const now = new Date();
   const out: Day[] = [];
   for (let i = 0; i < 56; i++) {
     const t = i / 55;
@@ -21,6 +23,7 @@ function makeDays(): Day[] {
       speech: Math.round(52 + 36 * t + (r() - 0.5) * 3.4),
       think: Math.round(61 + 28 * e + (r() - 0.5) * 3.0),
       done: r() < 0.76 ? 3 : r() < 0.6 ? 2 : 0,
+      date: new Date(now.getFullYear(), now.getMonth(), now.getDate() - (55 - i)),
     });
   }
   out[out.length - 1].done = 2; // сегодня 2 из 3 — кольцо частичное
@@ -29,6 +32,9 @@ function makeDays(): Day[] {
 
 export const days = makeDays();
 export const perDay = 3;
+
+export const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+export const dayByKey = new Map(days.map((d) => [dayKey(d.date), d]));
 
 export type Lesson = { title: string; about: string; done: boolean };
 export type LessonBlock = { metric: Metric; title: string; lessons: Lesson[]; foot: string };

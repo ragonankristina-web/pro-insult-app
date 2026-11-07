@@ -66,7 +66,7 @@ export function ProgressLine({ data, metric }: { data: Day[]; metric: Metric }) 
   );
 }
 
-const DAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+const DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']; // по Date.getDay()
 
 export function WeekBars({ week, perDay }: { week: Day[]; perDay: number }) {
   const { c } = useTheme();
@@ -89,8 +89,8 @@ export function WeekBars({ week, perDay }: { week: Day[]; perDay: number }) {
         })}
       </Svg>
       <View style={styles.days}>
-        {DAYS.slice(0, n).map((d) => (
-          <Text key={d} style={[styles.day, { color: c.inkMute }]}>{d}</Text>
+        {week.map((d, i) => (
+          <Text key={i} style={[styles.day, { color: c.inkMute }]}>{DAYS[d.date.getDay()]}</Text>
         ))}
       </View>
     </View>
