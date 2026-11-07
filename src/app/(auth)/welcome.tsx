@@ -1,10 +1,12 @@
 import { Redirect, router } from 'expo-router';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemeToggle } from '../../components/AuthScreen';
 import { Button, Notice } from '../../components/ui';
+import { DevLogin } from '../../components/DevLogin';
 import { useAuth } from '../../lib/Auth';
+import { devLoginEnabled } from '../../lib/dev';
 import { backendConfigured } from '../../lib/supabase';
 import { useTheme } from '../../theme/ThemeContext';
 import { fonts, radius } from '../../theme/tokens';
@@ -13,12 +15,15 @@ const logo = require('../../../assets/logo.png');
 
 export default function Welcome() {
   const { c } = useTheme();
-  const { session } = useAuth();
+  const { session, ready } = useAuth();
   const insets = useSafeAreaInsets();
-  if (session) return <Redirect href="/" />;
+  if (session && ready) return <Redirect href="/" />;
 
   return (
-    <View style={[styles.root, { backgroundColor: c.bg, paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }]}>
+    <ScrollView
+      style={{ backgroundColor: c.bg }}
+      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24 }]}
+    >
       <View style={styles.inner}>
         <View style={styles.top}>
           <ThemeToggle />
@@ -55,14 +60,15 @@ export default function Welcome() {
           <Text style={[styles.legal, { color: c.inkMute }]}>
             Новый номер — новый аккаунт: регистрация и вход происходят одинаково.
           </Text>
+          {devLoginEnabled && backendConfigured ? <DevLogin /> : null}
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, paddingHorizontal: 18 },
+  root: { flexGrow: 1, paddingHorizontal: 18 },
   inner: { flex: 1, width: '100%', maxWidth: 460, alignSelf: 'center' },
   top: { flexDirection: 'row', justifyContent: 'flex-end' },
   hero: { marginTop: 14, borderRadius: radius.l, paddingVertical: 30, paddingHorizontal: 22, alignItems: 'center', gap: 10 },

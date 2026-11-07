@@ -38,7 +38,7 @@ export default function About() {
     const err = await completeOnboarding({ role, fullName: name, consent });
     setBusy(false);
     if (err) return setError(err);
-    router.replace({ pathname: '/home', params: { welcome: '1' } });
+    router.replace({ pathname: '/profile', params: { welcome: '1' } });
   };
 
   return (

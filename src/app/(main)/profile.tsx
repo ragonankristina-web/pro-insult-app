@@ -5,9 +5,12 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemeToggle } from '../../components/AuthScreen';
+import { DevLogin } from '../../components/DevLogin';
 import { Icon } from '../../components/Icon';
+import { initials } from '../../components/Shell';
 import { Button, Field, Grad, Notice } from '../../components/ui';
 import { useAuth } from '../../lib/Auth';
+import { devLoginEnabled, isDevPhone } from '../../lib/dev';
 import { useLinks } from '../../lib/links';
 import { roleInfo, type Link, type Role } from '../../lib/supabase';
 import { useTheme } from '../../theme/ThemeContext';
@@ -20,12 +23,13 @@ const linkHint: Record<Role, string> = {
   doctor: 'Номер пациента (#пац-…)',
 };
 
-function initials(name: string) {
-  return (name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('') || '?').toUpperCase();
+function phoneText(phone: string | undefined) {
+  const d = phone ?? '';
+  return d.length === 11 ? `+${d[0]} ${d.slice(1, 4)} ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}` : d;
 }
 
-// Личный кабинет: номер, связи с врачом / пациентом / ухаживающим, выход.
-export default function Home() {
+// Профиль: личный номер, связи с врачом / пациентом / ухаживающим, выход. Открывается по аватару.
+export default function Profile() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const { profile, session, signOut } = useAuth();
@@ -74,12 +78,21 @@ export default function Home() {
     >
       <View style={styles.inner}>
         <View style={styles.topline}>
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/home'))}
+            accessibilityRole="button"
+            accessibilityLabel="Назад"
+            hitSlop={8}
+            style={[styles.back, { backgroundColor: c.pink2 }]}
+          >
+            <Icon name="back" color={c.pinkInk} size={22} />
+          </Pressable>
           <View style={[styles.avatar, { backgroundColor: c.blueSoft }]}>
             <Text style={[styles.avatarText, { color: c.profileInk }]}>{initials(profile.full_name)}</Text>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.name, { color: c.ink }]} numberOfLines={1}>{profile.full_name || 'Без имени'}</Text>
-            <Text style={[styles.sub, { color: c.inkMute }]} numberOfLines={1}>{`${info.title} · ${session?.user.email ?? ''}`}</Text>
+            <Text style={[styles.sub, { color: c.inkMute }]} numberOfLines={1}>{`${info.title} · ${phoneText(session?.user.phone)}`}</Text>
           </View>
           <ThemeToggle />
         </View>
@@ -160,6 +173,8 @@ export default function Home() {
           </Section>
         ) : null}
 
+        {devLoginEnabled && isDevPhone(session?.user.phone) ? <DevLogin current={profile.role} /> : null}
+
         <Pressable
           onPress={async () => {
             await signOut();
@@ -211,6 +226,7 @@ const styles = StyleSheet.create({
   root: { flexGrow: 1, paddingHorizontal: 18 },
   inner: { width: '100%', maxWidth: 460, alignSelf: 'center', gap: 16 },
   topline: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  back: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontFamily: fonts.head700, fontSize: 16 },
   name: { fontFamily: fonts.head700, fontSize: 18 },

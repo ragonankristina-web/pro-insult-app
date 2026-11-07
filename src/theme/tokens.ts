@@ -15,6 +15,11 @@ export const palette = {
     heroNum: '#4E1764',
     blue: '#1E80C2',
     blueSoft: '#83CDFF',
+    plumDeep: '#42085A', // кнопка «Чат»
+    moto: '#BEE1EC', // блоки занятий: моторика, речь, мышление
+    speech: '#FFE8B3',
+    think: '#ECBEDE',
+    ringTrack: 'rgba(255,255,255,0.55)',
     profileInk: '#0E4F7D',
     ink: '#2B1430',
     inkSoft: '#6A4A6E',
@@ -40,6 +45,11 @@ export const palette = {
     heroNum: '#EFC8F8',
     blue: '#2E95D8',
     blueSoft: '#2A5C80',
+    plumDeep: '#6E2A8C',
+    moto: '#1D3A45',
+    speech: '#3D3320',
+    think: '#3A2238',
+    ringTrack: 'rgba(255,255,255,0.12)',
     profileInk: '#CFE8FF',
     ink: '#F3E9F4',
     inkSoft: '#C6B0CD',

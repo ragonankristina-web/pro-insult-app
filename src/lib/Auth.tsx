@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { devAccounts } from './dev';
 import { backendConfigured, supabase, type Profile, type Role } from './supabase';
 import { ruAuthError } from './validation';
 
@@ -14,6 +15,7 @@ type Auth = {
   sendCode: (phone: string) => Result;
   verifyCode: (phone: string, code: string) => Result;
   completeOnboarding: (p: { role: Role; fullName: string; consent: boolean }) => Result;
+  devSignIn: (role: Role) => Result;
   signOut: () => Promise<void>;
 };
 
@@ -81,6 +83,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   }, []);
 
+  // Вход (или смена роли) тестовым аккаунтом без СМС. Пока идёт вход, ready = false —
+  // экраны не перенаправляют на выбор роли, пока у нового аккаунта нет профиля.
+  const devSignIn: Auth['devSignIn'] = useCallback(async (role) => {
+    const acc = devAccounts[role];
+    setReady(false);
+    setProfile(null);
+    try {
+      // Тестовому номеру СМС не отправляется; запрос нужен, чтобы аккаунт существовал.
+      // Ошибку «слишком часто» игнорируем — код тестового номера всё равно действует.
+      await supabase.auth.signInWithOtp({ phone: acc.phone });
+      const { data, error } = await supabase.auth.verifyOtp({ phone: acc.phone, token: acc.code, type: 'sms' });
+      if (error) return ruAuthError(error.message);
+      setSession(data.session);
+      const { data: existing } = await supabase.from('profiles').select('role').eq('id', data.user!.id).maybeSingle();
+      if (existing && existing.role !== role) {
+        await loadProfile(data.user!.id);
+        return `Тестовый номер ${acc.phone} уже зарегистрирован с другой ролью.`;
+      }
+      if (!existing) {
+        const { error: e } = await supabase.rpc('complete_onboarding', { p_role: role, p_full_name: acc.name, p_consent: true });
+        if (e) return ruAuthError(e.message);
+      }
+      await loadProfile(data.user!.id);
+      return null;
+    } finally {
+      setReady(true);
+    }
+  }, [loadProfile]);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -88,8 +119,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ready, session, profile, sendCode, verifyCode, completeOnboarding, signOut }),
-    [ready, session, profile, sendCode, verifyCode, completeOnboarding, signOut],
+    () => ({ ready, session, profile, sendCode, verifyCode, completeOnboarding, devSignIn, signOut }),
+    [ready, session, profile, sendCode, verifyCode, completeOnboarding, devSignIn, signOut],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
