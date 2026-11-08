@@ -69,7 +69,7 @@ export const lessonBlocks: LessonBlock[] = [
   },
 ];
 
-export type Message = { mine: boolean; text: string };
+export type Message = { mine: boolean; text: string; voice?: boolean }; // voice — надиктовано через Брэйни
 
 export const demoChat: Message[] = [
   { mine: false, text: 'Доброе утро! Вчера техника 91% — лучший результат за неделю. Продолжаем.' },

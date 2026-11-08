@@ -3,6 +3,8 @@
 
 export type VoiceState = { supported: boolean; denied: boolean; heard: string };
 
-export function useVoice(_enabled: boolean, _onText: (text: string) => boolean): VoiceState {
+export function setVoiceMuted(_on: boolean) {}
+
+export function useVoice(_enabled: boolean, _onText: (text: string, final: boolean) => boolean): VoiceState {
   return { supported: false, denied: false, heard: '' };
 }

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ProgressLine, Ring, WeekBars } from '../../../components/Charts';
-import { AiDot, initials, Sect, TabScreen, Topline, useSoon } from '../../../components/Shell';
+import { initials, Sect, TabScreen, Topline, useSoon } from '../../../components/Shell';
 import { Button, Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
 import { days, metricName, perDay, type Metric } from '../../../lib/demo';
@@ -53,14 +53,10 @@ export default function Home() {
           <View style={[styles.hero, { backgroundColor: c.pink }]}>
             <Ring share={days[days.length - 1].done / perDay} caption={'выполнено\nзаданий сегодня'} />
           </View>
-          <View style={styles.ctarow}>
-            <Button
-              title={role === 'caregiver' ? 'Открыть занятия' : 'Начать занятие'}
-              onPress={() => router.push('/lessons')}
-              style={{ flex: 1 }}
-            />
-            <AiDot />
-          </View>
+          <Button
+            title={role === 'caregiver' ? 'Открыть занятия' : 'Начать занятие'}
+            onPress={() => router.push('/lessons')}
+          />
         </>
       ) : (
         <Sect>Прогресс пациента · пример</Sect>
@@ -165,7 +161,6 @@ function DoctorPatients({ patients, loading }: { patients: Link[]; loading: bool
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hero: { borderRadius: radius.m, paddingVertical: 22, alignItems: 'center' },
-  ctarow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   charts: { borderRadius: radius.m, padding: 14, flexDirection: 'row', gap: 11 },
   box: { flex: 1, minWidth: 0, borderRadius: radius.s, paddingHorizontal: 10, paddingTop: 11, paddingBottom: 9 },
   h4: { fontFamily: fonts.head700, fontSize: 14 },

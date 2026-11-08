@@ -2,11 +2,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { useBrainy } from '../../../components/Brainy';
 import { Icon } from '../../../components/Icon';
-import { AiDot, Sect, TabScreen, Topline } from '../../../components/Shell';
+import { Sect, TabScreen, Topline } from '../../../components/Shell';
 import { Grad } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
-import { demoChat, lastScores, scoreParts, type Message } from '../../../lib/demo';
+import { useChat } from '../../../lib/chat';
+import { lastScores, scoreParts } from '../../../lib/demo';
 import { usePeople } from '../../../lib/people';
 import { useTheme } from '../../../theme/ThemeContext';
 import { fonts, radius } from '../../../theme/tokens';
@@ -39,8 +41,6 @@ export default function ChatAndStats() {
           </View>
         </>
       }
-      overlay={<AiDot floating />}
-      contentStyle={{ paddingBottom: 110 }}
     >
       {sub === 'chat' ? <Chat other={other} doctor={doctor} /> : <Stats />}
     </TabScreen>
@@ -64,13 +64,13 @@ function SubTab({ on, color, onPress, badge, children }: { on: boolean; color: s
 
 function Chat({ other, doctor }: { other: string; doctor: boolean }) {
   const { c } = useTheme();
-  // У врача демо-переписка показана с его стороны.
-  const [messages, setMessages] = useState<Message[]>(() => (doctor ? demoChat.map((m) => ({ ...m, mine: !m.mine })) : demoChat));
+  const { messages, add } = useChat();
+  const brainy = useBrainy();
   const [text, setText] = useState('');
   const send = () => {
     const t = text.trim();
     if (!t) return;
-    setMessages((m) => [...m, { mine: true, text: t }]);
+    add({ mine: true, text: t });
     setText('');
   };
   return (
@@ -79,7 +79,7 @@ function Chat({ other, doctor }: { other: string; doctor: boolean }) {
         {messages.map((m, i) =>
           m.mine ? (
             <Grad key={i} style={[styles.bub, styles.me]}>
-              <Text style={[styles.nm, { color: '#fff' }]}>Вы</Text>
+              <Text style={[styles.nm, { color: '#fff' }]}>{m.voice ? 'Вы · 🎙 надиктовано' : 'Вы'}</Text>
               <Text style={[styles.bubText, { color: '#fff' }]}>{m.text}</Text>
             </Grad>
           ) : (
@@ -101,6 +101,9 @@ function Chat({ other, doctor }: { other: string; doctor: boolean }) {
           style={[styles.input, { borderColor: c.line, backgroundColor: c.surface, color: c.ink }]}
           returnKeyType="send"
         />
+        <Pressable onPress={brainy.dictate} accessibilityRole="button" accessibilityLabel="Надиктовать сообщение Брэйни">
+          <View style={[styles.sendBtn, styles.micBtn, { backgroundColor: c.pink2 }]}><Icon name="mic" color={c.pinkInk} size={20} /></View>
+        </Pressable>
         <Pressable onPress={send} accessibilityRole="button" accessibilityLabel="Отправить">
           <Grad style={styles.sendBtn}><Icon name="send" color="#fff" size={20} /></Grad>
         </Pressable>
@@ -166,11 +169,12 @@ const styles = StyleSheet.create({
   them: { alignSelf: 'flex-start', borderBottomLeftRadius: 6 },
   nm: { fontFamily: fonts.body700, fontSize: 11.5, opacity: 0.8, marginBottom: 3 },
   bubText: { fontFamily: fonts.body500, fontSize: 15, lineHeight: 21 },
-  composer: { flexDirection: 'row', gap: 8, marginTop: 4, marginRight: 84 },
+  composer: { flexDirection: 'row', gap: 8, marginTop: 4 },
   input: { flex: 1, minWidth: 0, borderWidth: 1.5, borderRadius: radius.pill, paddingHorizontal: 16, minHeight: 50,
     fontFamily: fonts.body500, fontSize: 15, outlineWidth: 0 },
   sendBtn: { width: 54, height: 50, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  note: { fontFamily: fonts.body500, fontSize: 12, marginRight: 84 },
+  micBtn: { width: 50 },
+  note: { fontFamily: fonts.body500, fontSize: 12 },
   card: { borderRadius: radius.m, padding: 14, gap: 7 },
   cardTitle: { fontFamily: fonts.head700, fontSize: 16 },
   cardText: { fontFamily: fonts.body500, fontSize: 13.5, lineHeight: 19, marginBottom: 4 },

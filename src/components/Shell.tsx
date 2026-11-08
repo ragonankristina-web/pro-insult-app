@@ -10,7 +10,7 @@ import { Icon, type IconName } from './Icon';
 import { Grad, Notice } from './ui';
 
 // Каркас разделов из макета: нижнее меню на 4 вкладки, верхняя строка с профилем,
-// ассистент «Брэйни» и короткие подсказки о том, что появится позже.
+// короткие подсказки о том, что появится позже. Ассистент «Брэйни» — поверх всех экранов (Brainy.tsx).
 
 export function initials(name: string) {
   return (name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('') || '?').toUpperCase();
@@ -92,7 +92,7 @@ export function TabScreen({
 }: {
   children: ReactNode;
   header?: ReactNode; // закреплено над прокруткой (верхняя строка, переключатель)
-  overlay?: ReactNode; // поверх прокрутки (ассистент)
+  overlay?: ReactNode; // поверх прокрутки
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const { c } = useTheme();
@@ -136,44 +136,6 @@ export function Topline({ name, sub }: { name: string; sub: string }) {
   );
 }
 
-// ── ассистент «Брэйни» ────────────────────────────────────
-export function AiDot({ floating }: { floating?: boolean }) {
-  const { c } = useTheme();
-  const soon = useSoon();
-  return (
-    <Pressable
-      onPress={() => soon('Здесь откроется голосовой ассистент «Брэйни».')}
-      accessibilityRole="button"
-      accessibilityLabel="Голосовой ассистент Брэйни"
-      style={[styles.aiWrap, floating && styles.aiFloating]}
-    >
-      <View style={[styles.aiRing, { borderColor: c.magenta }]} />
-      <Grad style={[styles.aiDot, { shadowColor: c.shadow }]}>
-        <Text style={styles.aiFace}>🙂</Text>
-      </Grad>
-      <Text style={[styles.aiName, { color: c.inkMute }]}>Брэйни</Text>
-    </Pressable>
-  );
-}
-
-export function AiRail() {
-  const soon = useSoon();
-  const say = () => soon('Здесь откроется голосовой ассистент «Брэйни».');
-  return (
-    <Grad style={styles.rail}>
-      <View style={styles.railFace}><Text style={{ fontSize: 19 }}>🙂</Text></View>
-      <Pressable onPress={say} accessibilityRole="button" accessibilityLabel="Говорить с Брэйни" style={styles.railBtn}>
-        <Icon name="mic" color="#fff" size={18} />
-      </Pressable>
-      <Pressable onPress={() => soon('Брэйни подскажет, как выполнять упражнение.')} accessibilityRole="button"
-        accessibilityLabel="Подсказка" style={styles.railBtn}>
-        <Icon name="help" color="#fff" size={18} />
-      </Pressable>
-      <Text style={styles.railVert}>БРЭЙНИ</Text>
-    </Grad>
-  );
-}
-
 // ── заголовок вкладки без профиля: название и переключатель темы ──
 export function PageHeader({ title }: { title: string }) {
   const { c } = useTheme();
@@ -214,7 +176,7 @@ export function Sect({ children }: { children: ReactNode }) {
 const styles = StyleSheet.create({
   wrap: { width: '100%', maxWidth: 520, alignSelf: 'center', paddingHorizontal: 18 },
   scroll: { flexGrow: 1 },
-  content: { flexGrow: 1, gap: 14, paddingTop: 6, paddingBottom: 24 },
+  content: { flexGrow: 1, gap: 14, paddingTop: 6, paddingBottom: 104 }, // снизу место под Брэйни
   toast: { position: 'absolute', left: 0, right: 0, bottom: 104, alignItems: 'center', paddingHorizontal: 18 },
   toastInner: { width: '100%', maxWidth: 460 },
   nav: { borderTopWidth: 1, paddingTop: 9, paddingHorizontal: 12 },
@@ -229,22 +191,6 @@ const styles = StyleSheet.create({
   profileText: { fontFamily: fonts.head700, fontSize: 16 },
   who: { fontFamily: fonts.head700, fontSize: 17 },
   whoSub: { fontFamily: fonts.body500, fontSize: 13, marginTop: 2 },
-  aiWrap: { width: 78, height: 96, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
-  aiFloating: { position: 'absolute', right: 14, bottom: 8 },
-  aiRing: { position: 'absolute', top: -3, width: 84, height: 84, borderRadius: 42, borderWidth: 2, borderStyle: 'dashed',
-    opacity: 0.55 },
-  aiDot: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center',
-    shadowOffset: { width: 0, height: 14 }, shadowOpacity: 1, shadowRadius: 20, elevation: 5 },
-  aiFace: { fontSize: 28 },
-  aiName: { fontFamily: fonts.body700, fontSize: 11, marginTop: 7 },
-  rail: { position: 'absolute', right: -18, top: 8, bottom: 16, width: 58, borderTopLeftRadius: 22,
-    borderBottomLeftRadius: 22, alignItems: 'center', gap: 14, paddingVertical: 16 },
-  railFace: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center',
-    justifyContent: 'center' },
-  railBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center',
-    justifyContent: 'center' },
-  railVert: { marginTop: 'auto', color: '#fff', fontFamily: fonts.body700, fontSize: 11, letterSpacing: 2, opacity: 0.85,
-    transform: [{ rotate: '-90deg' }], width: 80, textAlign: 'center', marginBottom: 30 },
   pageHead: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4, paddingBottom: 8, minHeight: 58 },
   pageTitle: { flex: 1, fontFamily: fonts.head700, fontSize: 21 },
   backBtn: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },

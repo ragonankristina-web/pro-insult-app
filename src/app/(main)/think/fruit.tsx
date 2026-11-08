@@ -6,6 +6,7 @@ import { HandCamera, handCameraSupported, type Side } from '../../../components/
 import { BackHeader } from '../../../components/Shell';
 import { Button, Checkbox } from '../../../components/ui';
 import { useVoice } from '../../../components/useVoice';
+import { findWake } from '../../../lib/brainy';
 import {
   basketFromSpeech, basketImg, choose, fruitInfo, levels, makeRound, miss, needsSwap, pipeImg, swapSlots, type Round,
 } from '../../../lib/fruitGame';
@@ -128,6 +129,7 @@ export default function FruitGarden() {
   });
 
   const voice = useVoice(voiceOn, (text) => {
+    if (findWake(text)) return true; // фраза для Брэйни («Брэйни, напомни через два часа»), не выбор корзины
     const n = basketFromSpeech(text, count);
     return n >= 0 && pick(n);
   });
@@ -144,7 +146,7 @@ export default function FruitGarden() {
   return (
     <ScrollView
       style={{ backgroundColor: c.bg }}
-      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 28 }]}
+      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 110 }]}
     >
       <View style={styles.inner}>
         <BackHeader title="Фруктовый сад" />

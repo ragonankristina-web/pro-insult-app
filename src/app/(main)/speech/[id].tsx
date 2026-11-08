@@ -24,7 +24,7 @@ export default function ExerciseScreen() {
   return (
     <ScrollView
       style={{ backgroundColor: c.bg }}
-      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 28 }]}
+      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 110 }]}
     >
       <View style={styles.inner}>
         <BackHeader title={ex?.title ?? 'Упражнение'} />

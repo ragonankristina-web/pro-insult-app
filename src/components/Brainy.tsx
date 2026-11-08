@@ -1,0 +1,532 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Speech from 'expo-speech';
+import { router, usePathname } from 'expo-router';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useAuth } from '../lib/Auth';
+import { findWake, isAgain, isNo, isYes, parse, tidyMessage, whenText } from '../lib/brainy';
+import { useChat } from '../lib/chat';
+import { lessonBlocks } from '../lib/demo';
+import { speechExercises } from '../lib/exercises';
+import { useTheme } from '../theme/ThemeContext';
+import { fonts, radius } from '../theme/tokens';
+import { Icon } from './Icon';
+import { Button, Checkbox, Grad } from './ui';
+import { setVoiceMuted, useVoice } from './useVoice';
+
+// Ассистент «Брэйни» поверх всех экранов: кнопка в углу и окно разговора.
+// Отзывается на имя («Брэйни, открой речь»), открывает разделы, объясняет технику по карточкам упражнений,
+// ставит напоминания и пишет в чат с врачом под диктовку — только после подтверждения пациента.
+
+type Guide = { title: string; about: string; steps: string[]; path: string };
+
+const guides: Record<string, Guide> = {
+  ...Object.fromEntries(
+    speechExercises.map((e) => [e.id, { title: e.title, about: e.about, steps: e.steps, path: `/speech/${e.id}` }]),
+  ),
+  fruit: {
+    title: 'Фруктовый сад',
+    about: '6 уровней · внимание и сортировка',
+    steps: [
+      'Из трубы падает фрукт.',
+      'Выберите корзину с таким же фруктом: нажмите на неё или назовите её номер.',
+      'Можно поднять руку: левая — первая корзина, правая — последняя.',
+      'После выбора опустите руку.',
+    ],
+    path: '/think/fruit',
+  },
+};
+
+const examples = [
+  'Брэйни, открой упражнения для речи',
+  'Брэйни, как делать трубочку?',
+  'Брэйни, что на сегодня?',
+  'Брэйни, напомни в 18:00 про занятия',
+  'Брэйни, напиши врачу, что болит плечо',
+  'Брэйни, назад',
+];
+
+type Card =
+  | { kind: 'draft'; text: string }
+  | { kind: 'emergency'; write: string }
+  | { kind: 'guide'; id: string }
+  | { kind: 'help' };
+
+type Reminder = { id: number; at: number; what: string };
+
+const tabPaths = ['/home', '/lessons', '/chat', '/shop'];
+const KEY_WAKE = 'brainy.wake';
+const KEY_REMINDERS = 'brainy.reminders';
+
+const BrainyContext = createContext<{ dictate: () => void }>({ dictate: () => {} });
+export const useBrainy = () => useContext(BrainyContext);
+
+export function Brainy({ children }: { children: ReactNode }) {
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  const path = usePathname();
+  const { profile } = useAuth();
+  const chat = useChat();
+  const doctor = profile?.role === 'doctor';
+  const toWhom = doctor ? 'пациенту' : 'врачу';
+
+  const [open, setOpen] = useState(false);
+  const [reply, setReply] = useState('Здравствуйте! Я Брэйни. Чем помочь?');
+  const [card, setCard] = useState<Card | null>(null);
+  const [awaitMessage, setAwaitMessage] = useState(false);
+  const [mic, setMic] = useState(false); // одна фраза без обращения по имени (нажали 🎙)
+  const [wake, setWake] = useState(false); // слушать обращение «Брэйни» постоянно
+  const [input, setInput] = useState('');
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+
+  // Настройки и напоминания переживают перезапуск приложения.
+  useEffect(() => {
+    AsyncStorage.multiGet([KEY_WAKE, KEY_REMINDERS])
+      .then(([[, w], [, r]]) => {
+        if (w === '1') setWake(true);
+        if (r) setReminders(JSON.parse(r));
+      })
+      .catch(() => {});
+  }, []);
+  const saveWake = (on: boolean) => {
+    setWake(on);
+    AsyncStorage.setItem(KEY_WAKE, on ? '1' : '0').catch(() => {});
+  };
+  const saveReminders = useCallback((list: Reminder[]) => {
+    setReminders(list);
+    AsyncStorage.setItem(KEY_REMINDERS, JSON.stringify(list)).catch(() => {});
+  }, []);
+
+  // Говорит медленно — пациентам после инсульта так легче воспринимать. Пока говорит, микрофон не слушает.
+  const speak = useCallback((text: string) => {
+    setReply(text);
+    Speech.stop();
+    setVoiceMuted(true);
+    let done = false;
+    const unmute = () => {
+      if (done) return;
+      done = true;
+      setTimeout(() => setVoiceMuted(false), 400);
+    };
+    setTimeout(unmute, 2500 + text.length * 90); // если синтез речи недоступен
+    Speech.speak(text.replace(/[«»]/g, ''), { language: 'ru-RU', rate: 0.85, onDone: unmute, onStopped: unmute, onError: unmute });
+  }, []);
+
+  // Напоминания: пока приложение открыто, проверяем раз в 15 секунд.
+  useEffect(() => {
+    if (!reminders.length) return;
+    const id = setInterval(() => {
+      const now = Date.now();
+      const due = reminders.filter((r) => r.at <= now);
+      if (!due.length) return;
+      saveReminders(reminders.filter((r) => r.at > now));
+      setOpen(true);
+      setCard(null);
+      speak(`Напоминаю: ${due.map((r) => r.what).join(', ')}.`);
+    }, 15_000);
+    return () => clearInterval(id);
+  }, [reminders, saveReminders, speak]);
+
+  const here = /^\/speech\/(.+)$/.exec(path)?.[1] ?? (path === '/think/fruit' ? 'fruit' : null);
+  const go = (to: string) => {
+    if (to !== path) router.push(to as never);
+  };
+
+  const draft = (text: string) => {
+    const t = tidyMessage(text);
+    setAwaitMessage(false);
+    if (!t) return speak(`Что написать ${toWhom}? Говорите.`);
+    setCard({ kind: 'draft', text: t });
+    speak(`Я написал: ${t} Отправить?`);
+  };
+  const send = (text: string) => {
+    const t = text.trim();
+    if (!t) return;
+    chat.add({ mine: true, text: t, voice: true });
+    setCard(null);
+    speak(`Отправил ${toWhom}.`);
+    setOpen(false);
+    go('/chat');
+  };
+  const dictate = () => {
+    setOpen(true);
+    setCard(null);
+    setAwaitMessage(true);
+    speak(`Что написать ${toWhom}? Говорите.`);
+  };
+
+  const handle = (raw: string) => {
+    const text = raw.trim();
+    if (!text) return;
+    setOpen(true);
+    if (card?.kind === 'draft') {
+      if (isYes(text)) return send(card.text);
+      if (isNo(text)) {
+        setCard(null);
+        return speak('Не отправляю.');
+      }
+      if (isAgain(text)) {
+        setCard(null);
+        setAwaitMessage(true);
+        return speak('Говорите заново.');
+      }
+    }
+    if (awaitMessage) return draft(text);
+
+    const it = parse(text);
+    switch (it.kind) {
+      case 'go':
+        setCard(null);
+        speak(`Открываю ${it.to.title}.`);
+        setOpen(false);
+        return go(it.to.path);
+      case 'back':
+        setOpen(false);
+        return router.canGoBack() ? router.back() : router.replace('/home');
+      case 'explain': {
+        const id = it.id ?? here;
+        if (!id || !guides[id]) {
+          setCard({ kind: 'help' });
+          return speak('Какое упражнение объяснить? Скажите, например: как делать трубочку.');
+        }
+        setCard({ kind: 'guide', id });
+        return speak(`${guides[id].title}. ${guides[id].steps.join(' ')}`);
+      }
+      case 'write':
+        if (it.text) return draft(it.text);
+        setCard(null);
+        setAwaitMessage(true);
+        return speak(`Что написать ${toWhom}? Говорите.`);
+      case 'remind':
+        saveReminders([...reminders, { id: Date.now(), at: it.at.getTime(), what: it.what }].sort((a, b) => a.at - b.at));
+        setCard(null);
+        return speak(`Хорошо. Напомню ${whenText(it.at)}: ${it.what}.`);
+      case 'remindAsk':
+        setCard(null);
+        return speak('Когда напомнить? Скажите, например: напомни в 18:00 или через 30 минут.');
+      case 'today': {
+        const all = lessonBlocks.flatMap((b) => b.lessons);
+        const left = all.filter((l) => !l.done);
+        setCard(null);
+        return speak(
+          left.length
+            ? `Сегодня в плане ${all.length} упражнений, осталось ${left.length}: ${left.slice(0, 3).map((l) => l.title).join(', ')}.`
+            : 'Все упражнения на сегодня выполнены. Отличная работа!',
+        );
+      }
+      case 'help':
+        setCard({ kind: 'help' });
+        return speak('Вот что я умею.');
+      case 'stop':
+        Speech.stop();
+        setCard(null);
+        return setOpen(false);
+      case 'emergency':
+        setCard({ kind: 'emergency', write: it.write });
+        return speak('Если внезапно перекосило лицо, ослабли рука или нога или нарушилась речь — срочно звоните 103.');
+      default:
+        setCard({ kind: 'help' });
+        return speak('Я не понял. Вот что я умею.');
+    }
+  };
+
+  // Без обращения по имени слушаем, только когда Брэйни ждёт ответа: текст сообщения, «отправить» или нажат 🎙.
+  const direct = mic || awaitMessage || card?.kind === 'draft';
+  const voice = useVoice(wake || direct, (text, final) => {
+    if (!final) return false;
+    if (direct) {
+      setMic(false);
+      handle(findWake(text)?.command ?? text);
+      return true;
+    }
+    const w = findWake(text);
+    if (!w) return false;
+    if (w.command) handle(w.command);
+    else {
+      setOpen(true);
+      setMic(true);
+      speak('Слушаю.');
+    }
+    return true;
+  });
+
+  const toggle = () => {
+    if (open) {
+      Speech.stop();
+      setOpen(false);
+      setMic(false);
+      setAwaitMessage(false);
+      return;
+    }
+    setOpen(true);
+    if (voice.supported) setMic(true);
+  };
+  const submit = () => {
+    const t = input.trim();
+    setInput('');
+    if (t) handle(t);
+  };
+
+  const listening = voice.supported && !voice.denied && (direct || (wake && open));
+  const status = !voice.supported
+    ? 'Пишите вопрос ниже'
+    : voice.denied
+      ? 'Нет доступа к микрофону'
+      : awaitMessage
+        ? 'Слушаю сообщение…'
+        : direct
+          ? 'Слушаю…'
+          : wake
+            ? 'Обращайтесь: «Брэйни, …»'
+            : 'Нажмите 🎙 и говорите';
+
+  const base = insets.bottom + (tabPaths.includes(path) ? 90 : 16);
+  const chips = [
+    'Что на сегодня?',
+    here ? 'Как делать это упражнение?' : 'Как делать трубочку?',
+    `Написать ${toWhom}`,
+    'Напомнить через 30 минут',
+    'Что ты умеешь?',
+  ];
+
+  return (
+    <BrainyContext.Provider value={{ dictate }}>
+      <View style={{ flex: 1 }}>
+        {children}
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          {open ? <Pressable onPress={toggle} accessibilityLabel="Закрыть Брэйни" style={styles.backdrop} /> : null}
+          <View pointerEvents="box-none" style={styles.layer}>
+            {open ? (
+              <View
+                style={[styles.panel, { bottom: base + 84, maxHeight: '78%', backgroundColor: c.surface, borderColor: c.line,
+                  shadowColor: c.shadow }]}
+                accessibilityViewIsModal
+              >
+                <View style={styles.head}>
+                  <Grad style={styles.headFace}><Text style={{ fontSize: 18 }}>🙂</Text></Grad>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.headName, { color: c.ink }]}>Брэйни</Text>
+                    <Text style={[styles.headSub, { color: listening ? c.ok : c.inkMute }]} accessibilityLiveRegion="polite">
+                      {listening ? '● ' : ''}{status}
+                    </Text>
+                  </View>
+                  <Pressable onPress={toggle} accessibilityRole="button" accessibilityLabel="Закрыть" hitSlop={8}
+                    style={[styles.round, { backgroundColor: c.pink2 }]}>
+                    <Icon name="close" color={c.pinkInk} size={20} />
+                  </Pressable>
+                </View>
+
+                <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+                  <View style={[styles.say, { backgroundColor: c.pink2 }]}>
+                    <Text style={[styles.sayText, { color: c.ink }]} accessibilityLiveRegion="polite">{reply}</Text>
+                    <Pressable onPress={() => speak(reply)} accessibilityRole="button" accessibilityLabel="Повторить вслух"
+                      hitSlop={6} style={styles.repeat}>
+                      <Text style={{ fontSize: 18 }}>🔊</Text>
+                    </Pressable>
+                  </View>
+                  {listening && voice.heard ? (
+                    <Text style={[styles.heard, { color: c.inkSoft }]}>{`Вы: «${voice.heard}»`}</Text>
+                  ) : null}
+
+                  {card?.kind === 'draft' ? (
+                    <View style={[styles.card, { borderColor: c.magenta }]}>
+                      <Text style={[styles.cardTitle, { color: c.ink }]}>{`Сообщение ${toWhom}`}</Text>
+                      <TextInput
+                        value={card.text}
+                        onChangeText={(t) => setCard({ kind: 'draft', text: t })}
+                        multiline
+                        accessibilityLabel="Текст сообщения — можно исправить"
+                        style={[styles.draft, { color: c.ink, backgroundColor: c.pink2 }]}
+                      />
+                      <View style={styles.row}>
+                        <Button title="Отправить" onPress={() => send(card.text)} style={{ flex: 1 }} />
+                        <Button title="Заново" variant="soft" onPress={() => handle('заново')} style={{ flex: 1 }} />
+                      </View>
+                      <Button title="Не отправлять" variant="text" onPress={() => handle('отмена')} />
+                      <Text style={[styles.small, { color: c.inkMute }]}>
+                        Скажите «отправить» или «отмена». Текст можно исправить пальцем.
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {card?.kind === 'emergency' ? (
+                    <View style={[styles.card, { borderColor: c.error, backgroundColor: c.errorBg }]}>
+                      <Text style={[styles.cardTitle, { color: c.error }]}>Это может быть срочно</Text>
+                      <Text style={[styles.cardText, { color: c.ink }]}>
+                        Внезапно перекосило лицо, ослабли рука или нога, нарушилась речь — звоните 103 сразу, не ждите
+                        ответа врача в чате.
+                      </Text>
+                      <Button title="Позвонить 103" onPress={() => Linking.openURL('tel:103').catch(() => {})} />
+                      <Button title="Позвонить 112" variant="soft" onPress={() => Linking.openURL('tel:112').catch(() => {})} />
+                      {card.write ? (
+                        <Button title={`Написать ${toWhom}`} variant="text" onPress={() => draft(card.write)} />
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {card?.kind === 'guide' ? (
+                    <View style={[styles.card, { borderColor: c.line }]}>
+                      <Text style={[styles.cardTitle, { color: c.ink }]}>{guides[card.id].title}</Text>
+                      <Text style={[styles.small, { color: c.inkMute }]}>{guides[card.id].about}</Text>
+                      {guides[card.id].steps.map((s, i) => (
+                        <View key={s} style={styles.step}>
+                          <View style={[styles.stepNum, { backgroundColor: c.pink2 }]}>
+                            <Text style={[styles.stepNumText, { color: c.pinkInk }]}>{i + 1}</Text>
+                          </View>
+                          <Text style={[styles.cardText, { color: c.ink, flex: 1 }]}>{s}</Text>
+                        </View>
+                      ))}
+                      {guides[card.id].path !== path ? (
+                        <Button title="Открыть упражнение" onPress={() => { setOpen(false); go(guides[card.id].path); }} />
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {card?.kind === 'help' ? (
+                    <View style={[styles.card, { borderColor: c.line }]}>
+                      <Text style={[styles.cardTitle, { color: c.ink }]}>Можно сказать</Text>
+                      {examples.map((e) => (
+                        <Text key={e} style={[styles.cardText, { color: c.inkSoft }]}>{`«${e}»`}</Text>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {reminders.length ? (
+                    <View style={{ gap: 6 }}>
+                      <Text style={[styles.small, { color: c.inkMute }]}>Напоминания</Text>
+                      {reminders.map((r) => (
+                        <View key={r.id} style={[styles.reminder, { backgroundColor: c.pink2 }]}>
+                          <Text style={[styles.cardText, { color: c.ink, flex: 1 }]}>
+                            {`${whenText(new Date(r.at))} — ${r.what}`}
+                          </Text>
+                          <Pressable onPress={() => saveReminders(reminders.filter((x) => x.id !== r.id))}
+                            accessibilityRole="button" accessibilityLabel="Удалить напоминание" hitSlop={8}>
+                            <Icon name="close" color={c.inkMute} size={18} />
+                          </Pressable>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  <View style={styles.chips}>
+                    {chips.map((t) => (
+                      <Pressable key={t} onPress={() => handle(t)} accessibilityRole="button"
+                        style={({ pressed }) => [styles.chip, { backgroundColor: c.pink2, opacity: pressed ? 0.8 : 1 }]}>
+                        <Text style={[styles.chipText, { color: c.pinkInk }]}>{t}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  {voice.supported ? (
+                    <View style={{ gap: 4 }}>
+                      <Checkbox checked={wake} onChange={saveWake}>Отзываться на имя «Брэйни»</Checkbox>
+                      <Text style={[styles.small, { color: c.inkMute }]}>
+                        Микрофон слушает, пока открыто приложение. В Chrome речь распознаётся на серверах Google.
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.small, { color: c.inkMute }]}>
+                      Голосом Брэйни пока управляется в браузере Chrome или Edge. Здесь можно писать.
+                    </Text>
+                  )}
+                </ScrollView>
+
+                <View style={[styles.inputRow, { borderTopColor: c.line }]}>
+                  <TextInput
+                    value={input}
+                    onChangeText={setInput}
+                    onSubmitEditing={submit}
+                    placeholder={awaitMessage ? `Сообщение ${toWhom}` : 'Спросите Брэйни'}
+                    placeholderTextColor={c.inkMute}
+                    accessibilityLabel="Вопрос для Брэйни"
+                    returnKeyType="send"
+                    style={[styles.input, { borderColor: c.line, backgroundColor: c.surface, color: c.ink }]}
+                  />
+                  {voice.supported ? (
+                    <Pressable onPress={() => setMic((m) => !m)} accessibilityRole="button"
+                      accessibilityLabel={mic ? 'Не слушать' : 'Говорить'} accessibilityState={{ selected: mic }}>
+                      {mic ? (
+                        <Grad style={styles.roundBig}><Icon name="mic" color="#fff" size={20} /></Grad>
+                      ) : (
+                        <View style={[styles.roundBig, { backgroundColor: c.pink2 }]}><Icon name="mic" color={c.pinkInk} size={20} /></View>
+                      )}
+                    </Pressable>
+                  ) : null}
+                  <Pressable onPress={submit} accessibilityRole="button" accessibilityLabel="Спросить">
+                    <Grad style={styles.roundBig}><Icon name="send" color="#fff" size={20} /></Grad>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={toggle}
+              accessibilityRole="button"
+              accessibilityLabel={open ? 'Закрыть Брэйни' : 'Помощник Брэйни'}
+              style={[styles.bubble, { bottom: base }]}
+            >
+              <View style={[styles.ring, { borderColor: listening || wake ? c.ok : c.magenta, borderStyle: listening ? 'solid' : 'dashed' }]} />
+              <Grad style={[styles.dot, { shadowColor: c.shadow }]}>
+                {open ? <Icon name="close" color="#fff" size={24} /> : <Text style={styles.face}>🙂</Text>}
+              </Grad>
+              {wake && !open ? (
+                <View style={[styles.ear, { backgroundColor: c.ok, borderColor: c.surface }]}>
+                  <Icon name="mic" color="#fff" size={11} />
+                </View>
+              ) : null}
+              <View style={[styles.name, { backgroundColor: c.surface }]}>
+                <Text style={[styles.nameText, { color: c.inkSoft }]}>Брэйни</Text>
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </BrainyContext.Provider>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(20,13,25,0.28)' },
+  layer: { flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  panel: { position: 'absolute', left: 12, right: 12, borderRadius: radius.m, borderWidth: 1, overflow: 'hidden',
+    shadowOffset: { width: 0, height: 16 }, shadowOpacity: 1, shadowRadius: 28, elevation: 12 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
+  headFace: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  headName: { fontFamily: fonts.head700, fontSize: 17 },
+  headSub: { fontFamily: fonts.body600, fontSize: 12.5, marginTop: 1 },
+  round: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  body: { paddingHorizontal: 14, paddingBottom: 12, gap: 10 },
+  say: { borderRadius: radius.s, padding: 14, paddingRight: 44 },
+  sayText: { fontFamily: fonts.body600, fontSize: 17, lineHeight: 24 },
+  repeat: { position: 'absolute', right: 10, top: 10 },
+  heard: { fontFamily: fonts.body500, fontSize: 14, fontStyle: 'italic' },
+  card: { borderWidth: 1.5, borderRadius: radius.s, padding: 14, gap: 9 },
+  cardTitle: { fontFamily: fonts.head700, fontSize: 16 },
+  cardText: { fontFamily: fonts.body500, fontSize: 15, lineHeight: 21 },
+  small: { fontFamily: fonts.body500, fontSize: 12.5, lineHeight: 17 },
+  draft: { fontFamily: fonts.body600, fontSize: 17, lineHeight: 24, borderRadius: 13, padding: 12, minHeight: 80,
+    textAlignVertical: 'top', outlineWidth: 0 },
+  row: { flexDirection: 'row', gap: 8 },
+  step: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  stepNum: { width: 26, height: 26, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  stepNumText: { fontFamily: fonts.head700, fontSize: 13 },
+  reminder: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 9 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  chip: { borderRadius: radius.pill, paddingHorizontal: 13, paddingVertical: 9, minHeight: 40, justifyContent: 'center' },
+  chipText: { fontFamily: fonts.body700, fontSize: 13.5 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderTopWidth: 1 },
+  input: { flex: 1, minWidth: 0, borderWidth: 1.5, borderRadius: radius.pill, paddingHorizontal: 14, minHeight: 48,
+    fontFamily: fonts.body500, fontSize: 15, outlineWidth: 0 },
+  roundBig: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  bubble: { position: 'absolute', right: 14, width: 76, alignItems: 'center' },
+  ring: { position: 'absolute', top: -4, width: 72, height: 72, borderRadius: 36, borderWidth: 2, opacity: 0.7 },
+  dot: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center',
+    shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 18, elevation: 8 },
+  face: { fontSize: 27 },
+  ear: { position: 'absolute', top: -2, right: 6, width: 22, height: 22, borderRadius: 11, borderWidth: 2,
+    alignItems: 'center', justifyContent: 'center' },
+  name: { marginTop: -8, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  nameText: { fontFamily: fonts.body700, fontSize: 11 },
+});
