@@ -69,8 +69,16 @@ export const lessonBlocks: LessonBlock[] = [
   },
 ];
 
-// voice — надиктовано через Брэйни; at — время, мс; read — собеседник прочитал (для своих сообщений)
-export type Message = { mine: boolean; text: string; voice?: boolean; at?: number; read?: boolean };
+// voice — надиктовано через Брэйни; at — время, мс; read — собеседник прочитал (для своих сообщений);
+// video — видеокружок: path в хранилище (настоящий чат) или url на устройстве (пример переписки).
+export type Message = {
+  mine: boolean;
+  text: string;
+  voice?: boolean;
+  at?: number;
+  read?: boolean;
+  video?: { path?: string; url?: string; seconds: number };
+};
 
 export const demoChat: Message[] = [
   { mine: false, text: 'Доброе утро! Вчера техника 91% — лучший результат за неделю. Продолжаем.' },

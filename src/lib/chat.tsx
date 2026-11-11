@@ -20,6 +20,9 @@ type Row = {
   voice: boolean;
   created_at: string;
   read_at: string | null;
+  kind?: 'text' | 'video'; // столбцы видеокружков — после supabase/video-notes.sql
+  media_path?: string | null;
+  seconds?: number | null;
 };
 
 type Chat = {
@@ -29,13 +32,14 @@ type Chat = {
   error: string | null;
   messages: (thread: string) => Message[];
   add: (thread: string, m: Message) => Promise<string | null>; // текст ошибки или null
+  sendVideo: (thread: string, blob: Blob, mime: string, seconds: number) => Promise<string | null>;
   unread: (thread: string) => number; // сколько сообщений собеседника ещё не открыто
   markRead: (thread: string) => void;
 };
 
 const ChatContext = createContext<Chat>({
   doctorThread: DOCTOR_THREAD, isReal: () => false, ready: true, error: null,
-  messages: () => [], add: async () => null, unread: () => 0, markRead: () => {},
+  messages: () => [], add: async () => null, sendVideo: async () => null, unread: () => 0, markRead: () => {},
 });
 export const useChat = () => useContext(ChatContext);
 
@@ -53,6 +57,9 @@ function cleanError(m: string) {
   if (/failed to fetch|network/i.test(m)) return 'Нет связи с сервером. Проверьте интернет.';
   if (/row-level security|violates/i.test(m)) return 'Писать можно только тому, с кем связь подтверждена.';
   if (/messages.*does not exist|relation .*messages/i.test(m)) return 'Чат ещё не включён в базе: выполните supabase/chat.sql.';
+  if (/bucket not found|column .*(kind|media_path|seconds)|messages_kind/i.test(m))
+    return 'Видеокружки ещё не включены в базе: выполните supabase/video-notes.sql.';
+  if (/exceeded|too large|payload/i.test(m)) return 'Видео слишком большое — запишите покороче.';
   return m.replace(/^ERROR:\s*/i, '');
 }
 
@@ -101,7 +108,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     for (const r of rows) {
       const other = r.sender_id === me ? r.recipient_id : r.sender_id;
       const mine = r.sender_id === me;
-      (out[other] ??= []).push({ mine, text: r.body, voice: r.voice, at: Date.parse(r.created_at), read: mine && Boolean(r.read_at) });
+      (out[other] ??= []).push({
+        mine,
+        text: r.body,
+        voice: r.voice,
+        at: Date.parse(r.created_at),
+        read: mine && Boolean(r.read_at),
+        video: r.kind === 'video' && r.media_path ? { path: r.media_path, seconds: r.seconds ?? 0 } : undefined,
+      });
     }
     return out;
   }, [rows, me]);
@@ -139,6 +153,34 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [isReal, start],
   );
 
+  // Видеокружок: файл — в закрытое хранилище video-notes (папка отправителя/получателя), затем сообщение.
+  const sendVideo = useCallback(
+    async (thread: string, blob: Blob, mime: string, seconds: number) => {
+      const text = '🎥 Видеосообщение';
+      if (!isReal(thread)) {
+        const url = URL.createObjectURL(blob);
+        setDemo((t) => ({ ...t, [thread]: [...(t[thread] ?? start(thread)), { mine: true, text, at: Date.now(), video: { url, seconds } }] }));
+        return null;
+      }
+      const path = `${me}/${thread}/${Date.now()}.${mime.includes('mp4') ? 'mp4' : 'webm'}`;
+      const bucket = supabase.storage.from('video-notes');
+      const up = await bucket.upload(path, blob, { contentType: mime, upsert: false });
+      if (up.error) return cleanError(up.error.message);
+      const { data, error: e } = await supabase
+        .from('messages')
+        .insert({ recipient_id: thread, body: text, kind: 'video', media_path: path, seconds })
+        .select()
+        .single();
+      if (e) {
+        await bucket.remove([path]);
+        return cleanError(e.message);
+      }
+      setRows((list) => mergeRows(list, [data as Row]));
+      return null;
+    },
+    [isReal, start, me],
+  );
+
   const unread = useCallback(
     (thread: string) => {
       if (isReal(thread)) return rows.filter((r) => r.sender_id === thread && r.recipient_id === me && !r.read_at).length;
@@ -166,7 +208,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <ChatContext.Provider value={{ doctorThread, isReal, ready, error, messages, add, unread, markRead }}>
+    <ChatContext.Provider value={{ doctorThread, isReal, ready, error, messages, add, sendVideo, unread, markRead }}>
       {children}
     </ChatContext.Provider>
   );

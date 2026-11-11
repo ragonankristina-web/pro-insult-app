@@ -4,6 +4,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 
 import { useBrainy } from '../../../components/Brainy';
 import { Icon } from '../../../components/Icon';
+import { VideoNote } from '../../../components/VideoNote';
+import { VideoNoteRecorder } from '../../../components/VideoNoteRecorder';
 import { initials, PageHeader, Sect, TabScreen, Topline } from '../../../components/Shell';
 import { Grad, Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
@@ -107,6 +109,8 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
   const real = chat.isReal(thread);
   const [sending, setSending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  const [mode, setMode] = useState<'voice' | 'video'>('voice');
+  const [recording, setRecording] = useState(false);
   const { markRead } = chat;
   // Открыли переписку (или пришло новое сообщение, пока она открыта) — отмечаем прочитанным.
   useEffect(() => {
@@ -147,7 +151,9 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
                 style={[styles.line, { justifyContent: m.mine ? 'flex-end' : 'flex-start', marginTop: sameSide ? 3 : 10 }]}
                 accessibilityLabel={`${m.mine ? 'Вы' : other}: ${m.text}${m.mine && real && m.read ? ', прочитано' : ''}`}
               >
-                {m.mine ? (
+                {m.video ? (
+                  <VideoNote video={m.video} mine={m.mine} meta={meta.replace('🎙 ', '')} />
+                ) : m.mine ? (
                   <Grad style={[styles.bub, styles.me]}>
                     <Text style={[styles.bubText, { color: '#fff' }]}>{m.text}</Text>
                     {meta.trim() ? <Text style={[styles.meta, { color: 'rgba(255,255,255,0.85)' }]}>{meta}</Text> : null}
@@ -165,6 +171,21 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
         {!messages.length ? <View style={{ height: 40 }} /> : null}
       </View>
       <View style={styles.composer}>
+        {/* Переключатель, как в Telegram: голос (Брэйни) ↔ видеокружок. */}
+        <View style={[styles.modes, { backgroundColor: c.pink2 }]} accessibilityRole="radiogroup" accessibilityLabel="Голос или видеокружок">
+          {(['voice', 'video'] as const).map((k) => (
+            <Pressable
+              key={k}
+              onPress={() => setMode(k)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: mode === k }}
+              accessibilityLabel={k === 'voice' ? 'Голосом через Брэйни' : 'Видеокружок'}
+              style={[styles.modeBtn, mode === k && { backgroundColor: c.surface }]}
+            >
+              <Icon name={k === 'voice' ? 'mic' : 'circle'} color={mode === k ? c.magenta : c.pinkInk} size={19} />
+            </Pressable>
+          ))}
+        </View>
         <TextInput
           value={text}
           onChangeText={setText}
@@ -175,14 +196,25 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
           style={[styles.input, { borderColor: c.line, backgroundColor: c.surface, color: c.ink }]}
           returnKeyType="send"
         />
-        <Pressable onPress={brainy.dictate} accessibilityRole="button" accessibilityLabel="Надиктовать сообщение Брэйни">
-          <View style={[styles.sendBtn, styles.micBtn, { backgroundColor: c.pink2 }]}><Icon name="mic" color={c.pinkInk} size={20} /></View>
-        </Pressable>
-        <Pressable onPress={send} disabled={sending} accessibilityRole="button" accessibilityLabel="Отправить"
-          accessibilityState={{ busy: sending }}>
-          <Grad style={[styles.sendBtn, sending && { opacity: 0.6 }]}><Icon name="send" color="#fff" size={20} /></Grad>
-        </Pressable>
+        {text.trim() ? (
+          <Pressable onPress={send} disabled={sending} accessibilityRole="button" accessibilityLabel="Отправить"
+            accessibilityState={{ busy: sending }}>
+            <Grad style={[styles.sendBtn, sending && { opacity: 0.6 }]}><Icon name="send" color="#fff" size={20} /></Grad>
+          </Pressable>
+        ) : (
+          // Поле пустое — кнопка делает то, что выбрано переключателем: диктовка Брэйни или видеокружок.
+          <Pressable
+            onPress={mode === 'voice' ? brainy.dictate : () => setRecording(true)}
+            accessibilityRole="button"
+            accessibilityLabel={mode === 'voice' ? 'Надиктовать сообщение Брэйни' : 'Записать видеокружок'}
+          >
+            <Grad style={styles.sendBtn}><Icon name={mode === 'voice' ? 'mic' : 'circle'} color="#fff" size={22} /></Grad>
+          </Pressable>
+        )}
       </View>
+      {recording ? (
+        <VideoNoteRecorder onClose={() => setRecording(false)} onSend={(blob, mime, sec) => chat.sendVideo(thread, blob, mime, sec)} />
+      ) : null}
       {failed ? <Notice tone="error">{failed}</Notice> : null}
       <Text style={[styles.note, { color: c.inkMute }]}>
         {real
@@ -369,7 +401,8 @@ const styles = StyleSheet.create({
   input: { flex: 1, minWidth: 0, borderWidth: 1.5, borderRadius: radius.pill, paddingHorizontal: 16, minHeight: 50,
     fontFamily: fonts.body500, fontSize: 15, outlineWidth: 0 },
   sendBtn: { width: 54, height: 50, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  micBtn: { width: 50 },
+  modes: { flexDirection: 'row', borderRadius: radius.pill, padding: 3, gap: 2, alignSelf: 'center' },
+  modeBtn: { width: 40, height: 44, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   note: { fontFamily: fonts.body500, fontSize: 12 },
   card: { borderRadius: radius.m, padding: 14, gap: 7 },
   cardTitle: { fontFamily: fonts.head700, fontSize: 16 },
