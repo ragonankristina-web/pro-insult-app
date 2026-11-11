@@ -188,3 +188,12 @@ export function tidyMessage(raw: string) {
 export const isYes = (t: string) => /^(?:да|отправ\S*|готово|верно|правильно)(?:\s|$)/.test(norm(t));
 export const isNo = (t: string) => /^(?:нет|отмен\S*|не надо|не отправляй|стоп)(?:\s|$)/.test(norm(t));
 export const isAgain = (t: string) => /^(?:заново|еще раз|сначала|по другому|переделай)(?:\s|$)/.test(norm(t));
+
+// Чувство во фразе — для эмоций Брэйни (и в словах пациента, и в его собственных ответах).
+export function moodOf(raw: string): 'happy' | 'sad' | 'angry' | null {
+  const t = norm(raw);
+  if (/дурак|тупой|глуп|надоел|бесишь|отстань/.test(t)) return 'angry';
+  if (/плохо|устал|болит|больно|грустно|тяжело|не получается|не могу|не понял|не получилось|срочно|жаль/.test(t)) return 'sad';
+  if (/спасибо|получилось|отлично|хорошо|супер|класс|привет|здравствуй|молодец|отправил|выполнены|(?<!\p{L})(?:ура|рад)(?!\p{L})/u.test(t)) return 'happy';
+  return null;
+}

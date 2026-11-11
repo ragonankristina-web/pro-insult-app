@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HandCamera, handCameraSupported, type Side } from '../../../components/HandCamera';
 import { BackHeader } from '../../../components/Shell';
+import { react } from '../../../lib/brainyMood';
 import { Button, Checkbox } from '../../../components/ui';
 import { useVoice } from '../../../components/useVoice';
 import { findWake } from '../../../lib/brainy';
@@ -60,6 +61,7 @@ export default function FruitGarden() {
     if (r.position >= r.queue.length) {
       setRound(r);
       setPhase('done');
+      react('happy');
       setPassed((p) => (p.includes(r.level) ? p : [...p, r.level]));
       return;
     }
@@ -79,6 +81,7 @@ export default function FruitGarden() {
     if (!ok) {
       setRound(next);
       setFeedback('Это другая корзина. Посмотрите на фрукт и попробуйте ещё раз.');
+      react('sad');
       Animated.sequence(
         [8, -8, 6, 0].map((toValue) => Animated.timing(shake, { toValue, duration: 60, useNativeDriver: native })),
       ).start();
@@ -89,6 +92,7 @@ export default function FruitGarden() {
     setRound(next);
     setBusy(true);
     setFeedback(praise[next.correct % 3]);
+    react('happy');
     Animated.timing(fly, { toValue: 1, duration: 300, easing: Easing.in(Easing.quad), useNativeDriver: native }).start();
     const t = token.current;
     setTimeout(() => advance(next, t), 320);
@@ -104,6 +108,7 @@ export default function FruitGarden() {
         useNativeDriver: native }).start(({ finished }) => {
         if (!finished || cancelled) return;
         setFeedback('Фрукт пропущен. Следующий уже здесь — можно включить спокойный режим.');
+        react('angry'); // в шутку сердится на убежавший фрукт
         advance(miss(round), token.current);
       });
     });

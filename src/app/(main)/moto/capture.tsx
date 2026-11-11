@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PoseCamera } from '../../../components/PoseCamera';
 import { BackHeader } from '../../../components/Shell';
 import { Button } from '../../../components/ui';
+import { react } from '../../../lib/brainyMood';
 import { angle, KP, SCORE, type Keypoint, type PoseFrame } from '../../../lib/rtmpose';
 import { useTheme } from '../../../theme/ThemeContext';
 import { fonts, radius } from '../../../theme/tokens';
@@ -58,6 +59,8 @@ export default function Capture() {
     if (!f || t - shownAt.current < 250) return;
     shownAt.current = t;
     const m = { left: measure(f, 'left'), right: measure(f, 'right') };
+    // Рука поднята высоко (выше 150°) — Брэйни радуется.
+    if ((m.left.raise ?? 0) >= 150 || (m.right.raise ?? 0) >= 150) react('happy');
     setNow(m);
     setBest((b) => {
       const up = (s: Side): Measures => ({

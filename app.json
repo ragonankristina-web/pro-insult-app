@@ -31,7 +31,8 @@
           "cameraPermission": "Камера нужна, чтобы проверять, как вы выполняете упражнения. Видео не записывается и никуда не отправляется.",
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-image"
     ],
     "scheme": "proinsult",
     "experiments": {

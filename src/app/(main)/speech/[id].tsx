@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PatientCamera } from '../../../components/PatientCamera';
 import { BackHeader } from '../../../components/Shell';
+import { react } from '../../../lib/brainyMood';
 import { Button, Notice } from '../../../components/ui';
 import { speechExercises, type Exercise, type Verdict } from '../../../lib/exercises';
 import { useTheme } from '../../../theme/ThemeContext';
@@ -48,7 +49,10 @@ function Body({ ex }: { ex: Exercise }) {
   // Камера присылает оценку каждого кадра — обновляем экран только при смене состояния.
   // Повтор засчитывается, когда пациент вышел из верного положения (зелёная рамка погасла).
   const onVerdict = useCallback((v: Verdict) => {
-    if (prev.current === 'ok' && v.state !== 'ok') setReps((n) => n + 1);
+    if (prev.current === 'ok' && v.state !== 'ok') {
+      setReps((n) => n + 1);
+      react('happy'); // Брэйни радуется каждому повтору
+    }
     prev.current = v.state;
     setVerdict((old) => (old.state === v.state && old.hint === v.hint ? old : v));
   }, []);

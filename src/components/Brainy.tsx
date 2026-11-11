@@ -5,7 +5,8 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fro
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../lib/Auth';
-import { findWake, isAgain, isNo, isYes, parse, tidyMessage, whenText } from '../lib/brainy';
+import { findWake, isAgain, isNo, isYes, moodOf, parse, tidyMessage, whenText } from '../lib/brainy';
+import { react, reacting, setTalking } from '../lib/brainyMood';
 import { useChat } from '../lib/chat';
 import { say, stopSaying, voiceName, warmUpVoice } from '../lib/voice';
 import { sessionsOn, useClinic } from '../lib/clinic';
@@ -14,6 +15,7 @@ import { lessonBlocks } from '../lib/demo';
 import { speechExercises } from '../lib/exercises';
 import { useTheme } from '../theme/ThemeContext';
 import { fonts, radius } from '../theme/tokens';
+import { BrainyAvatar } from './BrainyAvatar';
 import { Icon } from './Icon';
 import { Button, Checkbox, Grad } from './ui';
 import { setVoiceMuted, useVoice } from './useVoice';
@@ -107,14 +109,19 @@ export function Brainy({ children }: { children: ReactNode }) {
 
   // Говорит медленно — пациентам после инсульта так легче воспринимать. Пока говорит, микрофон не слушает.
   // В браузере — голосом «Руслан» (lib/voice.web.ts); вызов из нажатия заодно разрешает браузеру звук.
+  // Пока говорит — анимация разговора; если в словах есть чувство («Отлично!», «Я не понял») — эта эмоция.
   const speak = useCallback((text: string) => {
     setReply(text);
     warmUpVoice();
     setVoiceMuted(true);
+    const felt = moodOf(text);
+    if (felt && !reacting()) react(felt);
+    setTalking(true);
     let done = false;
     const unmute = () => {
       if (done) return;
       done = true;
+      setTalking(false);
       setTimeout(() => setVoiceMuted(false), 400);
     };
     setTimeout(unmute, 6000 + text.length * 110); // если голос так и не ответил
@@ -181,6 +188,9 @@ export function Brainy({ children }: { children: ReactNode }) {
     const text = raw.trim();
     if (!text) return;
     setOpen(true);
+    // Брэйни сопереживает тому, что сказал пациент: радуется «спасибо», грустит от «мне плохо».
+    const felt = moodOf(text);
+    if (felt) react(felt);
     if (card?.kind === 'draft') {
       if (isYes(text)) return send(card.text);
       if (isNo(text)) {
@@ -331,12 +341,12 @@ export function Brainy({ children }: { children: ReactNode }) {
           <View pointerEvents="box-none" style={styles.layer}>
             {open ? (
               <View
-                style={[styles.panel, { bottom: base + 84, maxHeight: '78%', backgroundColor: c.surface, borderColor: c.line,
+                style={[styles.panel, { bottom: base + 66, maxHeight: '78%', backgroundColor: c.surface, borderColor: c.line,
                   shadowColor: c.shadow }]}
                 accessibilityViewIsModal
               >
                 <View style={styles.head}>
-                  <Grad style={styles.headFace}><Text style={{ fontSize: 18 }}>🙂</Text></Grad>
+                  <BrainyAvatar width={64} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.headName, { color: c.ink }]}>Брэйни</Text>
                     <Text style={[styles.headSub, { color: listening ? c.ok : c.inkMute }]} accessibilityLiveRegion="polite">
@@ -499,18 +509,24 @@ export function Brainy({ children }: { children: ReactNode }) {
               accessibilityLabel={open ? 'Закрыть Брэйни' : 'Помощник Брэйни'}
               style={[styles.bubble, { bottom: base }]}
             >
-              <View style={[styles.ring, { borderColor: listening || wake ? c.ok : c.magenta, borderStyle: listening ? 'solid' : 'dashed' }]} />
-              <Grad style={[styles.dot, { shadowColor: c.shadow }]}>
-                {open ? <Icon name="close" color="#fff" size={24} /> : <Text style={styles.face}>🙂</Text>}
-              </Grad>
-              {wake && !open ? (
-                <View style={[styles.ear, { backgroundColor: c.ok, borderColor: c.surface }]}>
-                  <Icon name="mic" color="#fff" size={11} />
-                </View>
-              ) : null}
-              <View style={[styles.name, { backgroundColor: c.surface }]}>
-                <Text style={[styles.nameText, { color: c.inkSoft }]}>Брэйни</Text>
-              </View>
+              {open ? (
+                // Окно открыто — сам Брэйни в окне, здесь только «закрыть».
+                <Grad style={[styles.dot, { shadowColor: c.shadow }]}>
+                  <Icon name="close" color="#fff" size={24} />
+                </Grad>
+              ) : (
+                <>
+                  <BrainyAvatar width={82} />
+                  {wake || listening ? (
+                    <View style={[styles.ear, { backgroundColor: c.ok, borderColor: c.surface }]}>
+                      <Icon name="mic" color="#fff" size={11} />
+                    </View>
+                  ) : null}
+                  <View style={[styles.name, { backgroundColor: c.surface, borderColor: c.line }]}>
+                    <Text style={[styles.nameText, { color: c.inkSoft }]}>Брэйни</Text>
+                  </View>
+                </>
+              )}
             </Pressable>
           </View>
         </View>
@@ -525,7 +541,6 @@ const styles = StyleSheet.create({
   panel: { position: 'absolute', left: 12, right: 12, borderRadius: radius.m, borderWidth: 1, overflow: 'hidden',
     shadowOffset: { width: 0, height: 16 }, shadowOpacity: 1, shadowRadius: 28, elevation: 12 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
-  headFace: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   headName: { fontFamily: fonts.head700, fontSize: 17 },
   headSub: { fontFamily: fonts.body600, fontSize: 12.5, marginTop: 1 },
   round: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
@@ -552,13 +567,11 @@ const styles = StyleSheet.create({
   input: { flex: 1, minWidth: 0, borderWidth: 1.5, borderRadius: radius.pill, paddingHorizontal: 14, minHeight: 48,
     fontFamily: fonts.body500, fontSize: 15, outlineWidth: 0 },
   roundBig: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  bubble: { position: 'absolute', right: 14, width: 76, alignItems: 'center' },
-  ring: { position: 'absolute', top: -4, width: 72, height: 72, borderRadius: 36, borderWidth: 2, opacity: 0.7 },
+  bubble: { position: 'absolute', right: 10, width: 90, alignItems: 'center' },
   dot: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center',
     shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 18, elevation: 8 },
-  face: { fontSize: 27 },
-  ear: { position: 'absolute', top: -2, right: 6, width: 22, height: 22, borderRadius: 11, borderWidth: 2,
+  ear: { position: 'absolute', top: 2, right: 4, width: 22, height: 22, borderRadius: 11, borderWidth: 2,
     alignItems: 'center', justifyContent: 'center' },
-  name: { marginTop: -8, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  name: { marginTop: -6, borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 1 },
   nameText: { fontFamily: fonts.body700, fontSize: 11 },
 });
