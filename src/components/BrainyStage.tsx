@@ -29,7 +29,8 @@ export function BrainyStage() {
     }, [fits]),
   );
 
-  const width = Math.min(230, box.w * 0.62, (box.h - 34) / BRAINY_RATIO);
+  // Заполняет свободное место: по высоте (минус подпись) и не шире 85% экрана и 380 px.
+  const width = Math.min(380, box.w * 0.85, (box.h - 30) / BRAINY_RATIO);
   return (
     <View
       style={styles.stage}

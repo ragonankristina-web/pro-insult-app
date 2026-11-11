@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type Vie
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../lib/Auth';
+import { useStageActive } from '../lib/brainyMood';
 import { useTheme } from '../theme/ThemeContext';
 import { fonts, radius } from '../theme/tokens';
 import { ThemeToggle } from './AuthScreen';
@@ -132,12 +133,14 @@ export function TabScreen({
 }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  // Брэйни стоит посередине экрана — место внизу под Брэйни в углу не нужно.
+  const stage = useStageActive();
   return (
     <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top + 8 }}>
       {header ? <View style={styles.wrap}>{header}</View> : null}
       <View style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={[styles.wrap, styles.content, contentStyle]}>{children}</View>
+          <View style={[styles.wrap, styles.content, stage && { paddingBottom: 20 }, contentStyle]}>{children}</View>
         </ScrollView>
         {overlay ? (
           <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>

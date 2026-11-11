@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BrainyStage } from '../../../components/BrainyStage';
+import { useStageActive } from '../../../lib/brainyMood';
 import { BackHeader } from '../../../components/Shell';
 import { useTheme } from '../../../theme/ThemeContext';
 import { fonts, radius } from '../../../theme/tokens';
@@ -11,10 +12,11 @@ import { fonts, radius } from '../../../theme/tokens';
 export default function Moto() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
+  const stage = useStageActive();
   return (
     <ScrollView
       style={{ backgroundColor: c.bg }}
-      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 140 }]}
+      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + (stage ? 24 : 140) }]}
     >
       <View style={styles.inner}>
         <BackHeader title="Моторика" />
