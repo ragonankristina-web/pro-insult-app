@@ -9,7 +9,7 @@ import { Grad, Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
 import { useChat } from '../../../lib/chat';
 import { useClinic } from '../../../lib/clinic';
-import { addDays, hm, sameDay, today } from '../../../lib/dates';
+import { addDays, hm, monthsOf, sameDay, today } from '../../../lib/dates';
 import { lastScores, scoreParts } from '../../../lib/demo';
 import { usePeople } from '../../../lib/people';
 import { useTheme } from '../../../theme/ThemeContext';
@@ -79,13 +79,23 @@ function SubTab({ on, color, onPress, badge, children }: { on: boolean; color: s
   );
 }
 
-// Время сообщения: сегодня — часы, вчера — «вчера», раньше — дата.
-function when(at?: number) {
+// Время в списке чатов: сегодня — часы, вчера — «вчера», раньше — дата.
+function lastWhen(at?: number) {
   if (!at) return '';
   const d = new Date(at);
   if (sameDay(d, today())) return hm(d);
   if (sameDay(d, addDays(today(), -1))) return 'вчера';
   return `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Время под сообщением — часы; день показан разделителем над сообщениями.
+const when = (at?: number) => (at ? hm(new Date(at)) : '');
+
+function dayLabel(at: number) {
+  const d = new Date(at);
+  if (sameDay(d, today())) return 'Сегодня';
+  if (sameDay(d, addDays(today(), -1))) return 'Вчера';
+  return `${d.getDate()} ${monthsOf[d.getMonth()]}`;
 }
 
 function Thread({ thread, other, placeholder }: { thread: string; other: string; placeholder: string }) {
@@ -118,24 +128,41 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
         <Text style={[styles.empty, { color: c.inkMute }]}>Сообщений пока нет — напишите первым.</Text>
       ) : null}
       {chat.error && real ? <Notice tone="error">{chat.error}</Notice> : null}
-      <View style={{ gap: 9 }}>
-        {messages.map((m, i) =>
-          m.mine ? (
-            <Grad key={i} style={[styles.bub, styles.me]}>
-              <Text style={[styles.nm, { color: '#fff' }]}>{m.voice ? 'Вы · 🎙 надиктовано' : 'Вы'}</Text>
-              <Text style={[styles.bubText, { color: '#fff' }]}>{m.text}</Text>
-              {m.at ? (
-                <Text style={[styles.time, { color: '#fff' }]}>{`${when(m.at)}${real ? (m.read ? ' · ✓✓ прочитано' : ' · ✓') : ''}`}</Text>
+      {/* Как в Telegram: свои сообщения — справа, собеседника — слева; между днями — дата. */}
+      <View style={[styles.room, { backgroundColor: c.pink2 }]} accessibilityLabel={`Переписка: ${other}`}>
+        {messages.map((m, i) => {
+          const prev = messages[i - 1];
+          const day = m.at ? dayLabel(m.at) : '';
+          const newDay = Boolean(day) && (!prev?.at || dayLabel(prev.at) !== day);
+          const sameSide = prev && prev.mine === m.mine && !newDay;
+          const meta = `${m.voice ? '🎙 ' : ''}${when(m.at)}${m.mine && real ? (m.read ? '  ✓✓' : '  ✓') : ''}`;
+          return (
+            <View key={i}>
+              {newDay ? (
+                <View style={styles.dayWrap}>
+                  <Text style={[styles.day, { backgroundColor: c.surface, color: c.inkSoft }]}>{day}</Text>
+                </View>
               ) : null}
-            </Grad>
-          ) : (
-            <View key={i} style={[styles.bub, styles.them, { backgroundColor: c.pink }]}>
-              <Text style={[styles.nm, { color: c.pinkInk }]}>{other}</Text>
-              <Text style={[styles.bubText, { color: c.ink }]}>{m.text}</Text>
-              {m.at ? <Text style={[styles.time, { color: c.pinkInk }]}>{when(m.at)}</Text> : null}
+              <View
+                style={[styles.line, { justifyContent: m.mine ? 'flex-end' : 'flex-start', marginTop: sameSide ? 3 : 10 }]}
+                accessibilityLabel={`${m.mine ? 'Вы' : other}: ${m.text}${m.mine && real && m.read ? ', прочитано' : ''}`}
+              >
+                {m.mine ? (
+                  <Grad style={[styles.bub, styles.me]}>
+                    <Text style={[styles.bubText, { color: '#fff' }]}>{m.text}</Text>
+                    {meta.trim() ? <Text style={[styles.meta, { color: 'rgba(255,255,255,0.85)' }]}>{meta}</Text> : null}
+                  </Grad>
+                ) : (
+                  <View style={[styles.bub, styles.them, { backgroundColor: c.surface, borderColor: c.line }]}>
+                    <Text style={[styles.bubText, { color: c.ink }]}>{m.text}</Text>
+                    {meta.trim() ? <Text style={[styles.meta, { color: c.inkMute }]}>{meta}</Text> : null}
+                  </View>
+                )}
+              </View>
             </View>
-          ),
-        )}
+          );
+        })}
+        {!messages.length ? <View style={{ height: 40 }} /> : null}
       </View>
       <View style={styles.composer}>
         <TextInput
@@ -244,7 +271,7 @@ function DoctorChats() {
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={styles.rowTop}>
                 <Text style={[styles.rowName, { color: c.ink }]} numberOfLines={1}>{p.name}</Text>
-                <Text style={[styles.rowTime, { color: unread ? c.magenta : c.inkMute }]}>{when(last?.at)}</Text>
+                <Text style={[styles.rowTime, { color: unread ? c.magenta : c.inkMute }]}>{lastWhen(last?.at)}</Text>
               </View>
               <View style={styles.rowTop}>
                 <Text style={[styles.rowText, { color: unread ? c.ink : c.inkMute }]} numberOfLines={1}>
@@ -325,15 +352,18 @@ const styles = StyleSheet.create({
     marginTop: 3 },
   unreadText: { color: '#fff', fontFamily: fonts.body700, fontSize: 12 },
   empty: { fontFamily: fonts.body500, fontSize: 14, textAlign: 'center', paddingVertical: 12 },
-  time: { fontFamily: fonts.body500, fontSize: 11, opacity: 0.7, marginTop: 4, alignSelf: 'flex-end' },
   subTab: { flex: 1, minHeight: 50, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 7 },
   subText: { fontFamily: fonts.head700, fontSize: 15 },
   badge: { width: 9, height: 9, borderRadius: 5 },
-  bub: { maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 18 },
-  me: { alignSelf: 'flex-end', borderBottomRightRadius: 6 },
-  them: { alignSelf: 'flex-start', borderBottomLeftRadius: 6 },
-  nm: { fontFamily: fonts.body700, fontSize: 11.5, opacity: 0.8, marginBottom: 3 },
+  room: { borderRadius: radius.m, paddingHorizontal: 10, paddingTop: 4, paddingBottom: 12 },
+  line: { flexDirection: 'row' },
+  bub: { maxWidth: '75%', paddingHorizontal: 13, paddingTop: 9, paddingBottom: 6, borderRadius: 18 },
+  me: { borderBottomRightRadius: 5 },
+  them: { borderBottomLeftRadius: 5, borderWidth: 1 },
+  meta: { fontFamily: fonts.body600, fontSize: 11, marginTop: 3, alignSelf: 'flex-end' },
+  dayWrap: { alignItems: 'center', marginTop: 12 },
+  day: { fontFamily: fonts.body700, fontSize: 12, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 4, overflow: 'hidden' },
   bubText: { fontFamily: fonts.body500, fontSize: 15, lineHeight: 21 },
   composer: { flexDirection: 'row', gap: 8, marginTop: 4 },
   input: { flex: 1, minWidth: 0, borderWidth: 1.5, borderRadius: radius.pill, paddingHorizontal: 16, minHeight: 50,
