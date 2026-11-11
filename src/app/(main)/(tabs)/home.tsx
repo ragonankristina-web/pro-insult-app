@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { ProgressLine, Ring, WeekBars } from '../../../components/Charts';
 import { BrainyStage } from '../../../components/BrainyStage';
@@ -25,6 +25,8 @@ export default function Home() {
   const { c } = useTheme();
   const { profile } = useAuth();
   const people = usePeople();
+  // Узкий экран (телефон) — кольцо поменьше, чтобы Брэйни рядом был крупнее.
+  const narrow = useWindowDimensions().width < 440;
   if (!profile) {
     return (
       <View style={[styles.center, { backgroundColor: c.bg }]}>
@@ -44,16 +46,15 @@ export default function Home() {
         <Notice tone="info">Привяжите подопечного по его номеру (#пац-…) в профиле. Пока показан пример данных.</Notice>
       ) : null}
 
+      {/* Карточка растягивается на всё свободное место; Брэйни рядом с кольцом растёт вместе с ней. */}
       <View style={[styles.hero, { backgroundColor: c.pink }]}>
-        <Ring share={days[days.length - 1].done / perDay} caption={'выполнено\nзаданий сегодня'} />
+        <Ring share={days[days.length - 1].done / perDay} caption={'выполнено\nзаданий сегодня'} size={narrow ? 150 : 188} />
+        <BrainyStage share={1} hint={false} />
       </View>
       <Button
         title={role === 'caregiver' ? 'Открыть занятия' : 'Начать занятие'}
         onPress={() => router.push('/lessons')}
       />
-
-      {/* Свободное место посередине — под большого Брэйни. */}
-      <BrainyStage />
 
       <ChartsCard />
     </TabScreen>
@@ -117,7 +118,8 @@ function ChartsCard() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  hero: { borderRadius: radius.m, paddingVertical: 22, alignItems: 'center' },
+  hero: { flexGrow: 1, borderRadius: radius.m, paddingVertical: 18, paddingHorizontal: 14, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: 6 },
   charts: { borderRadius: radius.m, padding: 14, flexDirection: 'row', gap: 11 },
   box: { flex: 1, minWidth: 0, borderRadius: radius.s, paddingHorizontal: 10, paddingTop: 11, paddingBottom: 9 },
   h4: { fontFamily: fonts.head700, fontSize: 14 },

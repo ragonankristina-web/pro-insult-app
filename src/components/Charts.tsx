@@ -10,12 +10,14 @@ import { fonts } from '../theme/tokens';
 const R = 78;
 const LEN = 2 * Math.PI * R;
 
-export function Ring({ share, caption }: { share: number; caption: string }) {
+// size — диаметр кольца (по умолчанию 188); на узком экране главной кольцо меньше, чтобы рядом поместился Брэйни.
+export function Ring({ share, caption, size = 188 }: { share: number; caption: string; size?: number }) {
+  const k = size / 188;
   const { c } = useTheme();
   const pct = Math.round(share * 100);
   return (
-    <View style={styles.ring} accessible accessibilityLabel={`${pct}% ${caption.replace('\n', ' ')}`}>
-      <Svg width={188} height={188} viewBox="0 0 188 188" style={{ transform: [{ rotate: '-90deg' }] }}>
+    <View style={{ width: size, height: size }} accessible accessibilityLabel={`${pct}% ${caption.replace('\n', ' ')}`}>
+      <Svg width={size} height={size} viewBox="0 0 188 188" style={{ transform: [{ rotate: '-90deg' }] }}>
         <Defs>
           <LinearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor={c.g1} />
@@ -27,8 +29,8 @@ export function Ring({ share, caption }: { share: number; caption: string }) {
           strokeDasharray={`${LEN} ${LEN}`} strokeDashoffset={LEN * (1 - share)} />
       </Svg>
       <View style={styles.ringMid}>
-        <Text style={[styles.pct, { color: c.heroNum }]}>{pct}%</Text>
-        <Text style={[styles.cap, { color: c.pinkInk }]}>{caption}</Text>
+        <Text style={[styles.pct, { color: c.heroNum, fontSize: 44 * k, lineHeight: 48 * k }]}>{pct}%</Text>
+        <Text style={[styles.cap, { color: c.pinkInk, fontSize: Math.max(11.5, 13 * k), lineHeight: Math.max(15, 18 * k) }]}>{caption}</Text>
       </View>
     </View>
   );
@@ -98,7 +100,6 @@ export function WeekBars({ week, perDay }: { week: Day[]; perDay: number }) {
 }
 
 const styles = StyleSheet.create({
-  ring: { width: 188, height: 188 },
   ringMid: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   pct: { fontFamily: fonts.head700, fontSize: 44, lineHeight: 48, fontVariant: ['tabular-nums'] },
   cap: { fontFamily: fonts.body600, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 4 },

@@ -14,7 +14,8 @@ import { fonts } from '../theme/tokens';
 
 const MIN = 170; // меньше — Брэйни не поместится крупно, оставляем его в углу
 
-export function BrainyStage() {
+// share — какую долю ширины места может занять Брэйни; hint — подпись под ним.
+export function BrainyStage({ share = 0.85, hint = true }: { share?: number; hint?: boolean }) {
   const { c } = useTheme();
   const brainy = useBrainy();
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -30,7 +31,7 @@ export function BrainyStage() {
   );
 
   // Заполняет свободное место: по высоте (минус подпись) и не шире 85% экрана и 380 px.
-  const width = Math.min(380, box.w * 0.85, (box.h - 30) / BRAINY_RATIO);
+  const width = Math.min(380, box.w * share, (box.h - (hint ? 30 : 4)) / BRAINY_RATIO);
   return (
     <View
       style={styles.stage}
@@ -47,7 +48,7 @@ export function BrainyStage() {
           style={({ pressed }) => [styles.press, { opacity: pressed ? 0.85 : 1 }]}
         >
           <BrainyAvatar width={width} />
-          <Text style={[styles.hint, { color: c.inkMute }]}>Нажмите на меня или скажите «Брэйни»</Text>
+          {hint ? <Text style={[styles.hint, { color: c.inkMute }]}>Нажмите на меня или скажите «Брэйни»</Text> : null}
         </Pressable>
       ) : null}
     </View>
@@ -55,7 +56,7 @@ export function BrainyStage() {
 }
 
 const styles = StyleSheet.create({
-  stage: { flex: 1, minHeight: 0, alignItems: 'center', justifyContent: 'center' },
+  stage: { flex: 1, minHeight: 0, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   press: { alignItems: 'center' },
   hint: { fontFamily: fonts.body600, fontSize: 12.5, marginTop: 2, textAlign: 'center' },
 });
