@@ -1,4 +1,4 @@
-// Модели MediaPipe для браузера: мимика (упражнения «Речь») и поза (поднятая рука в игре «Фруктовый сад»).
+// Модель MediaPipe для браузера: мимика (упражнения «Речь»). Поза тела — RTMPose (rtmposeWeb.ts).
 // Считаются прямо на устройстве — видео никуда не отправляется, из сети один раз загружается модель.
 // Вызывается только из *.web.tsx.
 
@@ -9,11 +9,6 @@ export type FaceLandmarker = {
   detectForVideo: (v: HTMLVideoElement, t: number) => {
     faceBlendshapes?: { categories: { categoryName: string; score: number }[] }[];
   };
-};
-
-export type Point = { x: number; y: number; visibility?: number };
-export type PoseLandmarker = {
-  detectForVideo: (v: HTMLVideoElement, t: number) => { landmarks: Point[][] };
 };
 
 // import() по адресу CDN прячем от сборщика — модуль грузится только в браузере.
@@ -30,7 +25,7 @@ function once<T>(make: () => Promise<T>) {
   };
 }
 
-async function create<T>(kind: 'FaceLandmarker' | 'PoseLandmarker', model: string, options: object): Promise<T> {
+async function create<T>(kind: 'FaceLandmarker', model: string, options: object): Promise<T> {
   const vision = await importUrl(`${CDN}/vision_bundle.mjs`);
   const files = await vision.FilesetResolver.forVisionTasks(`${CDN}/wasm`);
   const make = (delegate: 'GPU' | 'CPU') =>
@@ -46,8 +41,3 @@ export const loadFaceLandmarker = once(() =>
   }),
 );
 
-export const loadPoseLandmarker = once(() =>
-  create<PoseLandmarker>('PoseLandmarker', `${MODELS}/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task`, {
-    numPoses: 1,
-  }),
-);

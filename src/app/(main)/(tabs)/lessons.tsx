@@ -9,7 +9,7 @@ import { useTheme } from '../../../theme/ThemeContext';
 import { fonts, radius } from '../../../theme/tokens';
 
 // Разделы, где уже есть свои упражнения: нажатие на ярлык блока открывает их список.
-const sections: Partial<Record<Metric, string>> = { speech: '/speech', think: '/think' };
+const sections: Partial<Record<Metric, string>> = { moto: '/moto', speech: '/speech', think: '/think' };
 
 // Занятия на сегодня: блоки «Мышление», «Моторика», «Речь».
 export default function Lessons() {
