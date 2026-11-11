@@ -1,14 +1,11 @@
+import { loadOrt } from './ortWeb';
 import { boxAround, decode, INPUT_H, INPUT_W, SCORE, toTensor, wholeFrame, type Box, type PoseFrame } from './rtmpose';
 
 // RTMPose в браузере через ONNX Runtime Web: на видеокарте (WebGPU), если есть, иначе на процессоре (WASM).
 // Считается на устройстве — кадры никуда не отправляются; модель (~70 МБ) лежит в public/models
 // и грузится один раз, дальше берётся из кэша браузера. Вызывается только из *.web.tsx.
 
-const ORT = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
 const MODEL = '/models/rtmpose-m-wholebody.onnx';
-
-// import() по адресу CDN прячем от сборщика — модуль грузится только в браузере.
-const importUrl = new Function('u', 'return import(u)') as (u: string) => Promise<any>;
 
 export class RtmPose {
   private box: Box | null = null;
@@ -58,10 +55,7 @@ export function loadRtmPose() {
 }
 
 async function create() {
-  const ort = await importUrl(`${ORT}ort.webgpu.min.mjs`);
-  ort.env.wasm.wasmPaths = ORT;
-  // Несколько потоков браузер даёт только изолированной странице; иначе — один.
-  ort.env.wasm.numThreads = globalThis.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+  const ort = await loadOrt();
   const res = await fetch(MODEL);
   if (!res.ok) throw new Error(`model ${res.status}`);
   const model = new Uint8Array(await res.arrayBuffer());

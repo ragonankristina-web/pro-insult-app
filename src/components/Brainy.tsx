@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Speech from 'expo-speech';
 import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -8,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/Auth';
 import { findWake, isAgain, isNo, isYes, parse, tidyMessage, whenText } from '../lib/brainy';
 import { useChat } from '../lib/chat';
+import { say, stopSaying, voiceName, warmUpVoice } from '../lib/voice';
 import { sessionsOn, useClinic } from '../lib/clinic';
 import { hm, today } from '../lib/dates';
 import { lessonBlocks } from '../lib/demo';
@@ -106,9 +106,10 @@ export function Brainy({ children }: { children: ReactNode }) {
   }, []);
 
   // Говорит медленно — пациентам после инсульта так легче воспринимать. Пока говорит, микрофон не слушает.
+  // В браузере — голосом «Руслан» (lib/voice.web.ts); вызов из нажатия заодно разрешает браузеру звук.
   const speak = useCallback((text: string) => {
     setReply(text);
-    Speech.stop();
+    warmUpVoice();
     setVoiceMuted(true);
     let done = false;
     const unmute = () => {
@@ -116,8 +117,8 @@ export function Brainy({ children }: { children: ReactNode }) {
       done = true;
       setTimeout(() => setVoiceMuted(false), 400);
     };
-    setTimeout(unmute, 2500 + text.length * 90); // если синтез речи недоступен
-    Speech.speak(text.replace(/[«»]/g, ''), { language: 'ru-RU', rate: 0.85, onDone: unmute, onStopped: unmute, onError: unmute });
+    setTimeout(unmute, 6000 + text.length * 110); // если голос так и не ответил
+    say(text.replace(/[«»]/g, ''), unmute);
   }, []);
 
   // Напоминания: пока приложение открыто, проверяем раз в 15 секунд.
@@ -249,7 +250,7 @@ export function Brainy({ children }: { children: ReactNode }) {
         setCard({ kind: 'help' });
         return speak('Вот что я умею.');
       case 'stop':
-        Speech.stop();
+        stopSaying();
         setCard(null);
         return setOpen(false);
       case 'emergency':
@@ -283,13 +284,14 @@ export function Brainy({ children }: { children: ReactNode }) {
 
   const toggle = () => {
     if (open) {
-      Speech.stop();
+      stopSaying();
       setOpen(false);
       setMic(false);
       setAwaitMessage(false);
       return;
     }
     setOpen(true);
+    warmUpVoice();
     if (voice.supported) setMic(true);
   };
   const submit = () => {
@@ -448,6 +450,7 @@ export function Brainy({ children }: { children: ReactNode }) {
                     ))}
                   </View>
 
+                  <Text style={[styles.small, { color: c.inkMute }]}>{`Голос: ${voiceName}`}</Text>
                   {voice.supported ? (
                     <View style={{ gap: 4 }}>
                       <Checkbox checked={wake} onChange={saveWake}>Отзываться на имя «Брэйни»</Checkbox>
