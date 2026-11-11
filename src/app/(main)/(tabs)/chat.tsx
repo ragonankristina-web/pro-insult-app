@@ -1,13 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useBrainy } from '../../../components/Brainy';
 import { Icon } from '../../../components/Icon';
 import { initials, PageHeader, Sect, TabScreen, Topline } from '../../../components/Shell';
 import { Grad, Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
-import { DOCTOR_THREAD, useChat } from '../../../lib/chat';
+import { useChat } from '../../../lib/chat';
 import { useClinic } from '../../../lib/clinic';
 import { addDays, hm, sameDay, today } from '../../../lib/dates';
 import { lastScores, scoreParts } from '../../../lib/demo';
@@ -28,6 +28,7 @@ function ChatAndStats() {
   const { c } = useTheme();
   const { profile } = useAuth();
   const people = usePeople();
+  const chat = useChat();
   const params = useLocalSearchParams<{ sub?: string }>();
   const sub: Sub = params.sub === 'stats' ? 'stats' : 'chat';
   const setSub = (s: Sub) => router.setParams({ sub: s });
@@ -47,7 +48,18 @@ function ChatAndStats() {
         </>
       }
     >
-      {sub === 'chat' ? <Thread thread={DOCTOR_THREAD} other={other} placeholder="Сообщение врачу" /> : <Stats />}
+      {sub === 'chat' ? (
+        <>
+          {!chat.isReal(chat.doctorThread) && !people.loading ? (
+            <Notice tone="info">
+              Врач ещё не привязан — показан пример переписки. Привяжите врача по его номеру (#врач-…) в профиле.
+            </Notice>
+          ) : null}
+          <Thread thread={chat.doctorThread} other={other} placeholder="Сообщение врачу" />
+        </>
+      ) : (
+        <Stats />
+      )}
     </TabScreen>
   );
 }
@@ -82,23 +94,39 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
   const brainy = useBrainy();
   const messages = chat.messages(thread);
   const [text, setText] = useState('');
+  const real = chat.isReal(thread);
+  const [sending, setSending] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const { markRead } = chat;
-  useEffect(() => markRead(thread), [markRead, thread]);
-  const send = () => {
+  // Открыли переписку (или пришло новое сообщение, пока она открыта) — отмечаем прочитанным.
+  useEffect(() => {
+    markRead(thread);
+  }, [markRead, thread]);
+  const send = async () => {
     const t = text.trim();
-    if (!t) return;
-    chat.add(thread, { mine: true, text: t });
-    setText('');
+    if (!t || sending) return;
+    setSending(true);
+    const err = await chat.add(thread, { mine: true, text: t });
+    setSending(false);
+    setFailed(err);
+    if (!err) setText('');
   };
   return (
     <>
+      {real && !chat.ready ? <ActivityIndicator color={c.magenta} /> : null}
+      {real && chat.ready && !messages.length ? (
+        <Text style={[styles.empty, { color: c.inkMute }]}>Сообщений пока нет — напишите первым.</Text>
+      ) : null}
+      {chat.error && real ? <Notice tone="error">{chat.error}</Notice> : null}
       <View style={{ gap: 9 }}>
         {messages.map((m, i) =>
           m.mine ? (
             <Grad key={i} style={[styles.bub, styles.me]}>
               <Text style={[styles.nm, { color: '#fff' }]}>{m.voice ? 'Вы · 🎙 надиктовано' : 'Вы'}</Text>
               <Text style={[styles.bubText, { color: '#fff' }]}>{m.text}</Text>
-              {m.at ? <Text style={[styles.time, { color: '#fff' }]}>{when(m.at)}</Text> : null}
+              {m.at ? (
+                <Text style={[styles.time, { color: '#fff' }]}>{`${when(m.at)}${real ? (m.read ? ' · ✓✓ прочитано' : ' · ✓') : ''}`}</Text>
+              ) : null}
             </Grad>
           ) : (
             <View key={i} style={[styles.bub, styles.them, { backgroundColor: c.pink }]}>
@@ -123,11 +151,17 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
         <Pressable onPress={brainy.dictate} accessibilityRole="button" accessibilityLabel="Надиктовать сообщение Брэйни">
           <View style={[styles.sendBtn, styles.micBtn, { backgroundColor: c.pink2 }]}><Icon name="mic" color={c.pinkInk} size={20} /></View>
         </Pressable>
-        <Pressable onPress={send} accessibilityRole="button" accessibilityLabel="Отправить">
-          <Grad style={styles.sendBtn}><Icon name="send" color="#fff" size={20} /></Grad>
+        <Pressable onPress={send} disabled={sending} accessibilityRole="button" accessibilityLabel="Отправить"
+          accessibilityState={{ busy: sending }}>
+          <Grad style={[styles.sendBtn, sending && { opacity: 0.6 }]}><Icon name="send" color="#fff" size={20} /></Grad>
         </Pressable>
       </View>
-      <Text style={[styles.note, { color: c.inkMute }]}>Переписка пока демонстрационная и не сохраняется.</Text>
+      {failed ? <Notice tone="error">{failed}</Notice> : null}
+      <Text style={[styles.note, { color: c.inkMute }]}>
+        {real
+          ? 'Переписку видите только вы и собеседник. Новые сообщения приходят сразу.'
+          : 'Это пример переписки — он не сохраняется.'}
+      </Text>
     </>
   );
 }
@@ -290,6 +324,7 @@ const styles = StyleSheet.create({
   unread: { minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
     marginTop: 3 },
   unreadText: { color: '#fff', fontFamily: fonts.body700, fontSize: 12 },
+  empty: { fontFamily: fonts.body500, fontSize: 14, textAlign: 'center', paddingVertical: 12 },
   time: { fontFamily: fonts.body500, fontSize: 11, opacity: 0.7, marginTop: 4, alignSelf: 'flex-end' },
   subTab: { flex: 1, minHeight: 50, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 7 },

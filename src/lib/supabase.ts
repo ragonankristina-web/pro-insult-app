@@ -41,6 +41,7 @@ export type Link = {
   id: number;
   status: 'pending' | 'accepted';
   incoming: boolean;
+  other_id: string; // id профиля второго человека — ему пишем в чате
   other_name: string;
   other_number: string;
   other_role: Role;

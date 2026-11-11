@@ -1,6 +1,7 @@
 -- PRO Инсульт · схема базы v3 (вход по телефону, личные номера, связи).
 -- Supabase → SQL Editor → New query → вставить ВЕСЬ файл в пустой редактор → Run.
--- Файл можно выполнять повторно: он сначала удаляет свои старые объекты.
+-- Файл можно выполнять повторно: он сначала удаляет свои старые объекты (и переписку).
+-- После него выполните chat.sql — сообщения чата.
 
 -- ── 0. Удаляем старую схему (тестовые данные прошлой версии) ──────────────
 drop trigger if exists on_auth_user_created on auth.users;
@@ -203,11 +204,11 @@ $$;
 
 -- Все мои связи и запросы с данными второго человека.
 create function public.my_links()
-returns table (id bigint, status text, incoming boolean, other_name text, other_number text, other_role text,
-               created_at timestamptz)
+returns table (id bigint, status text, incoming boolean, other_id uuid, other_name text, other_number text,
+               other_role text, created_at timestamptz)
 language sql stable security definer set search_path = ''
 as $$
-  select l.id, l.status, l.target_id = auth.uid(), p.full_name, p.personal_number, p.role, l.created_at
+  select l.id, l.status, l.target_id = auth.uid(), p.id, p.full_name, p.personal_number, p.role, l.created_at
   from public.links l
   join public.profiles p on p.id = case when l.requester_id = auth.uid() then l.target_id else l.requester_id end
   where auth.uid() in (l.requester_id, l.target_id) and l.status <> 'declined'

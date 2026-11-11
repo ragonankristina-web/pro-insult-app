@@ -100,11 +100,13 @@ export const useClinic = () => useContext(ClinicContext);
 export function ClinicProvider({ children }: { children: ReactNode }) {
   const people = usePeople();
   // Связи приходят новым массивом на каждой отрисовке — пересчитываем, только когда изменились сами люди.
-  const raw = JSON.stringify(people.patients.map((l) => [l.id, l.other_name, l.other_number]));
+  // Пока в базе не выполнен chat.sql, id профиля не приходит — тогда переписка с пациентом остаётся примером.
+  const raw = JSON.stringify(people.patients.map((l) => [l.other_id ?? `l${l.id}`, l.other_name, l.other_number]));
   const patients = useMemo<Patient[]>(() => {
-    const real = JSON.parse(raw) as [number, string, string][];
+    const real = JSON.parse(raw) as [string, string, string][];
+    // У настоящего пациента id — id его профиля: по нему же идёт переписка в чате.
     const list = real.length
-      ? real.map(([id, name, number]) => ({ id: `l${id}`, name: name || 'Без имени', number, demo: false }))
+      ? real.map(([id, name, number]) => ({ id, name: name || 'Без имени', number, demo: false }))
       : demoPeople.map(([name, number], i) => ({ id: `d${i}`, name, number, demo: true }));
     return list.map((p) => ({ ...p, seed: hash(p.id + p.number), week: 2 + (hash(p.id) % 9) }));
   }, [raw]);

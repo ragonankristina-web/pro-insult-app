@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../lib/Auth';
 import { findWake, isAgain, isNo, isYes, parse, tidyMessage, whenText } from '../lib/brainy';
-import { DOCTOR_THREAD, useChat } from '../lib/chat';
+import { useChat } from '../lib/chat';
 import { sessionsOn, useClinic } from '../lib/clinic';
 import { hm, today } from '../lib/dates';
 import { lessonBlocks } from '../lib/demo';
@@ -76,7 +76,7 @@ export function Brainy({ children }: { children: ReactNode }) {
   const toWhom = doctor ? 'пациенту' : 'врачу';
   // Куда писать: у пациента — лечащему врачу; у врача — в открытый сейчас чат с пациентом.
   const params = useGlobalSearchParams<{ with?: string }>();
-  const thread = doctor ? (path === '/chat' && typeof params.with === 'string' ? params.with : null) : DOCTOR_THREAD;
+  const thread = doctor ? (path === '/chat' && typeof params.with === 'string' ? params.with : null) : chat.doctorThread;
 
   const [open, setOpen] = useState(false);
   const [reply, setReply] = useState('Здравствуйте! Я Брэйни. Чем помочь?');
@@ -157,11 +157,16 @@ export function Brainy({ children }: { children: ReactNode }) {
   const send = (text: string) => {
     const t = text.trim();
     if (!t || !thread) return;
-    chat.add(thread, { mine: true, text: t, voice: true });
     setCard(null);
-    speak(`Отправил ${toWhom}.`);
-    setOpen(false);
-    if (!doctor) go('/chat');
+    chat.add(thread, { mine: true, text: t, voice: true }).then((err) => {
+      if (err) {
+        setCard({ kind: 'draft', text: t });
+        return speak(`Не получилось отправить. ${err}`);
+      }
+      speak(`Отправил ${toWhom}.`);
+      setOpen(false);
+      if (!doctor) go('/chat');
+    });
   };
   const dictate = () => {
     setOpen(true);

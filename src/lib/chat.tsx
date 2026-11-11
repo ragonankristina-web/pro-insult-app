@@ -1,54 +1,173 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { useAuth } from './Auth';
 import { demoChat, doctorThreads, type Message } from './demo';
+import { usePeople } from './people';
+import { backendConfigured, supabase } from './supabase';
 
 // Переписка — общая для экранов чата и ассистента Брэйни (он отправляет надиктованное).
-// У пациента и ухаживающего один чат — с лечащим врачом (DOCTOR_THREAD). У врача — отдельный чат с каждым пациентом
-// (по id пациента из кабинета). Пока демонстрационная и живёт только в памяти.
+// Чат с подтверждённой связью — настоящий: сообщения в таблице messages (supabase/chat.sql), новые приходят
+// сразу через Realtime. Переписка = id профиля собеседника. Пока связи нет — пример из демо-данных
+// (DOCTOR_THREAD у пациента, d0…d5 у врача), он живёт только в памяти.
 
 export const DOCTOR_THREAD = 'doctor';
 
+type Row = {
+  id: number;
+  sender_id: string;
+  recipient_id: string;
+  body: string;
+  voice: boolean;
+  created_at: string;
+  read_at: string | null;
+};
+
 type Chat = {
+  doctorThread: string; // у пациента — переписка с лечащим врачом (или пример, если врач не привязан)
+  isReal: (thread: string) => boolean;
+  ready: boolean; // переписка из базы загружена
+  error: string | null;
   messages: (thread: string) => Message[];
-  add: (thread: string, m: Message) => void;
-  unread: (thread: string) => number; // сколько последних сообщений собеседника ещё не открыто
+  add: (thread: string, m: Message) => Promise<string | null>; // текст ошибки или null
+  unread: (thread: string) => number; // сколько сообщений собеседника ещё не открыто
   markRead: (thread: string) => void;
 };
 
-const ChatContext = createContext<Chat>({ messages: () => [], add: () => {}, unread: () => 0, markRead: () => {} });
+const ChatContext = createContext<Chat>({
+  doctorThread: DOCTOR_THREAD, isReal: () => false, ready: true, error: null,
+  messages: () => [], add: async () => null, unread: () => 0, markRead: () => {},
+});
 export const useChat = () => useContext(ChatContext);
 
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const hash = (s: string) => [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) & 0x7fffffff, 7);
+
+// Добавить или обновить строки (по id) и держать их по времени.
+const mergeRows = (list: Row[], add: Row[]) => {
+  const byId = new Map(list.map((r) => [r.id, r]));
+  add.forEach((r) => byId.set(r.id, r));
+  return [...byId.values()].sort((a, b) => a.id - b.id);
+};
+
+function cleanError(m: string) {
+  if (/failed to fetch|network/i.test(m)) return 'Нет связи с сервером. Проверьте интернет.';
+  if (/row-level security|violates/i.test(m)) return 'Писать можно только тому, с кем связь подтверждена.';
+  if (/messages.*does not exist|relation .*messages/i.test(m)) return 'Чат ещё не включён в базе: выполните supabase/chat.sql.';
+  return m.replace(/^ERROR:\s*/i, '');
+}
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth();
+  const me = profile?.id;
   const doctor = profile?.role === 'doctor';
-  const [threads, setThreads] = useState<Record<string, Message[]>>({});
-  const [read, setRead] = useState<Record<string, boolean>>({});
+  const people = usePeople();
+  const doctorThread = people.doctor?.other_id ?? DOCTOR_THREAD;
 
-  // Начало переписки, пока в ней ничего не менялось.
+  // ── настоящая переписка ──
+  const [rows, setRows] = useState<Row[]>([]);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!me || !backendConfigured) return;
+    let alive = true;
+    supabase
+      .from('messages')
+      .select('*')
+      .order('id', { ascending: true })
+      .limit(2000)
+      .then(({ data, error: e }) => {
+        if (!alive) return;
+        if (e) setError(cleanError(e.message));
+        else setRows((list) => mergeRows(list, (data as Row[]) ?? []));
+        setReady(true);
+      });
+    // Новые сообщения и «прочитано» — сразу; правила доступа пропускают только свою переписку.
+    const channel = supabase
+      .channel(`messages:${me}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (p) => {
+        const r = p.new as Partial<Row>;
+        if (r && typeof r.id === 'number') setRows((list) => mergeRows(list, [r as Row]));
+      })
+      .subscribe();
+    return () => {
+      alive = false;
+      supabase.removeChannel(channel);
+    };
+  }, [me]);
+
+  const byThread = useMemo(() => {
+    const out: Record<string, Message[]> = {};
+    for (const r of rows) {
+      const other = r.sender_id === me ? r.recipient_id : r.sender_id;
+      const mine = r.sender_id === me;
+      (out[other] ??= []).push({ mine, text: r.body, voice: r.voice, at: Date.parse(r.created_at), read: mine && Boolean(r.read_at) });
+    }
+    return out;
+  }, [rows, me]);
+
+  // ── пример переписки (пока связи нет) ──
+  const [demo, setDemo] = useState<Record<string, Message[]>>({});
+  const [demoRead, setDemoRead] = useState<Record<string, boolean>>({});
   const start = useCallback(
     (thread: string) => (doctor ? doctorThreads[hash(thread) % doctorThreads.length] : demoChat),
     [doctor],
   );
-  const messages = useCallback((thread: string) => threads[thread] ?? start(thread), [threads, start]);
-  const add = useCallback(
-    (thread: string, m: Message) =>
-      setThreads((t) => ({ ...t, [thread]: [...(t[thread] ?? start(thread)), { at: Date.now(), ...m }] })),
-    [start],
+
+  const isReal = useCallback((thread: string) => backendConfigured && uuid.test(thread), []);
+
+  const messages = useCallback(
+    (thread: string) => (isReal(thread) ? byThread[thread] ?? [] : demo[thread] ?? start(thread)),
+    [isReal, byThread, demo, start],
   );
+
+  const add = useCallback(
+    async (thread: string, m: Message) => {
+      if (!isReal(thread)) {
+        setDemo((t) => ({ ...t, [thread]: [...(t[thread] ?? start(thread)), { at: Date.now(), ...m }] }));
+        return null;
+      }
+      const { data, error: e } = await supabase
+        .from('messages')
+        .insert({ recipient_id: thread, body: m.text.trim(), voice: Boolean(m.voice) })
+        .select()
+        .single();
+      if (e) return cleanError(e.message);
+      setRows((list) => mergeRows(list, [data as Row]));
+      return null;
+    },
+    [isReal, start],
+  );
+
   const unread = useCallback(
     (thread: string) => {
-      if (read[thread]) return 0;
-      const list = messages(thread);
+      if (isReal(thread)) return rows.filter((r) => r.sender_id === thread && r.recipient_id === me && !r.read_at).length;
+      if (demoRead[thread]) return 0;
+      const list = demo[thread] ?? start(thread);
       let n = 0;
       for (let i = list.length - 1; i >= 0 && !list[i].mine; i--) n++;
       return n;
     },
-    [messages, read],
+    [isReal, rows, me, demoRead, demo, start],
   );
-  const markRead = useCallback((thread: string) => setRead((r) => (r[thread] ? r : { ...r, [thread]: true })), []);
 
-  return <ChatContext.Provider value={{ messages, add, unread, markRead }}>{children}</ChatContext.Provider>;
+  const markRead = useCallback(
+    (thread: string) => {
+      if (!isReal(thread)) {
+        setDemoRead((r) => (r[thread] ? r : { ...r, [thread]: true }));
+        return;
+      }
+      if (!rows.some((r) => r.sender_id === thread && r.recipient_id === me && !r.read_at)) return;
+      const now = new Date().toISOString();
+      setRows((list) => list.map((r) => (r.sender_id === thread && r.recipient_id === me && !r.read_at ? { ...r, read_at: now } : r)));
+      supabase.rpc('mark_read', { p_other: thread }).then(() => {});
+    },
+    [isReal, rows, me],
+  );
+
+  return (
+    <ChatContext.Provider value={{ doctorThread, isReal, ready, error, messages, add, unread, markRead }}>
+      {children}
+    </ChatContext.Provider>
+  );
 }
