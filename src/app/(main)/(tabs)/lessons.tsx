@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { DoctorLessons } from '../../../components/DoctorLessons';
 import { PageHeader, TabScreen, useSoon } from '../../../components/Shell';
-import { Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
 import { lessonBlocks, type Metric } from '../../../lib/demo';
 import { useTheme } from '../../../theme/ThemeContext';
@@ -11,19 +11,17 @@ import { fonts, radius } from '../../../theme/tokens';
 // Разделы, где уже есть свои упражнения: нажатие на ярлык блока открывает их список.
 const sections: Partial<Record<Metric, string>> = { moto: '/moto', speech: '/speech', think: '/think' };
 
-// Занятия на сегодня: блоки «Мышление», «Моторика», «Речь».
+// Занятия на сегодня: блоки «Мышление», «Моторика», «Речь». У врача — групповые и индивидуальные занятия.
 export default function Lessons() {
-  const { c } = useTheme();
   const { profile } = useAuth();
+  return profile?.role === 'doctor' ? <DoctorLessons /> : <TodayLessons />;
+}
+
+function TodayLessons() {
+  const { c } = useTheme();
   const soon = useSoon();
-  const doctor = profile?.role === 'doctor';
   return (
-    <TabScreen
-      header={<PageHeader title={doctor ? 'Программа пациента · пример' : 'Занятия на сегодня'} />}
-    >
-      {doctor ? (
-        <Notice tone="info">Здесь врач будет назначать и менять упражнения пациента.</Notice>
-      ) : null}
+    <TabScreen header={<PageHeader title="Занятия на сегодня" />}>
       {lessonBlocks.map((b) => {
         const done = b.lessons.filter((l) => l.done).length;
         return (

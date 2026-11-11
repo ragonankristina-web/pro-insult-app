@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '../lib/Auth';
 import { useTheme } from '../theme/ThemeContext';
 import { fonts, radius } from '../theme/tokens';
 import { ThemeToggle } from './AuthScreen';
@@ -43,22 +44,36 @@ export function SoonProvider({ children }: { children: ReactNode }) {
 }
 
 // ── нижнее меню ───────────────────────────────────────────
-const tabs: { id: string; label: string; icon: IconName }[] = [
+type Tab = { id: string; label: string; icon: IconName; main?: boolean };
+
+const tabs: Tab[] = [
   { id: 'home', label: 'Главный', icon: 'home' },
   { id: 'lessons', label: 'Занятия', icon: 'list' },
   { id: 'chat', label: 'Чат и\nпоказатели', icon: 'chat' },
   { id: 'shop', label: 'Покупки', icon: 'bag' },
 ];
 
+// У врача 5 вкладок; главная «Врач» — посередине, большой круглой кнопкой.
+const doctorTabs: Tab[] = [
+  { id: 'lessons', label: 'Занятия', icon: 'list' },
+  { id: 'chat', label: 'Чаты', icon: 'chat' },
+  { id: 'home', label: 'Врач', icon: 'doctor', main: true },
+  { id: 'stats', label: 'Статистика', icon: 'stats' },
+  { id: 'shop', label: 'Покупки', icon: 'wallet' },
+];
+
 export function TabBar() {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const path = usePathname();
+  const { profile } = useAuth();
+  const list = profile?.role === 'doctor' ? doctorTabs : tabs;
   return (
     <View style={[styles.nav, { backgroundColor: c.surface, borderTopColor: c.line, paddingBottom: insets.bottom + 10 }]}>
       <View style={styles.navInner} accessibilityRole="tablist">
-        {tabs.map((t) => {
+        {list.map((t) => {
           const on = path === `/${t.id}`;
+          if (t.main) return <MainTab key={t.id} tab={t} on={on} />;
           const body = (
             <>
               <Icon name={t.icon} color={on ? c.onGrad : c.inkMute} size={22} />
@@ -80,6 +95,26 @@ export function TabBar() {
         })}
       </View>
     </View>
+  );
+}
+
+function MainTab({ tab, on }: { tab: Tab; on: boolean }) {
+  const { c } = useTheme();
+  return (
+    <Pressable
+      onPress={() => !on && router.push(`/${tab.id}` as never)}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: on }}
+      accessibilityLabel={tab.label}
+      style={styles.navItem}
+    >
+      <View style={styles.mainCell}>
+        <Grad style={[styles.mainDot, { borderColor: c.surface, shadowColor: c.shadow }, !on && { opacity: 0.85 }]}>
+          <Icon name={tab.icon} color={c.onGrad} size={28} />
+        </Grad>
+        <Text style={[styles.navText, { color: on ? c.magenta : c.inkMute }]}>{tab.label}</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -185,6 +220,9 @@ const styles = StyleSheet.create({
   navCell: { minHeight: 58, borderRadius: radius.s, alignItems: 'center', justifyContent: 'center', gap: 3,
     paddingVertical: 6, paddingHorizontal: 2 },
   navText: { fontFamily: fonts.body700, fontSize: 11.5, textAlign: 'center', lineHeight: 14 },
+  mainCell: { alignItems: 'center', gap: 3, marginTop: -26 },
+  mainDot: { width: 66, height: 66, borderRadius: 33, alignItems: 'center', justifyContent: 'center', borderWidth: 4,
+    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 1, shadowRadius: 16, elevation: 6 },
   topline: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4, paddingBottom: 8 },
   profile: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
     shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.45, shadowRadius: 12, elevation: 3 },

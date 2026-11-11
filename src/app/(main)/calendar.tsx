@@ -5,33 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../../components/Icon';
 import { BackHeader } from '../../components/Shell';
 import { Grad } from '../../components/ui';
+import { monthCells, months, monthsOf, today, weekdays, weekHead as head } from '../../lib/dates';
 import { dayByKey, dayKey, days, metricName, perDay, type Day, type Metric } from '../../lib/demo';
 import { useTheme } from '../../theme/ThemeContext';
 import { fonts, radius } from '../../theme/tokens';
 
-const months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь',
-  'Ноябрь', 'Декабрь'];
-const monthsOf = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября',
-  'ноября', 'декабря'];
-const weekdays = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
-const head = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 const metrics: Metric[] = ['moto', 'speech', 'think'];
-
-const today = () => {
-  const n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
-};
 const start = days[0].date;
-
-// Клетки месяца: пустые до первого числа (неделя с понедельника), затем все дни месяца.
-function monthCells(year: number, month: number): (Date | null)[] {
-  const lead = (new Date(year, month, 1).getDay() + 6) % 7;
-  const count = new Date(year, month + 1, 0).getDate();
-  const cells: (Date | null)[] = Array.from({ length: lead }, () => null);
-  for (let d = 1; d <= count; d++) cells.push(new Date(year, month, d));
-  while (cells.length % 7) cells.push(null);
-  return cells;
-}
 
 // Календарь занятий: по месяцам, цвет дня — сколько занятий сделано; по нажатию — подробности дня.
 export default function Calendar() {

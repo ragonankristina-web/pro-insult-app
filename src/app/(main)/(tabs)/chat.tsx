@@ -1,13 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useBrainy } from '../../../components/Brainy';
 import { Icon } from '../../../components/Icon';
-import { Sect, TabScreen, Topline } from '../../../components/Shell';
-import { Grad } from '../../../components/ui';
+import { initials, PageHeader, Sect, TabScreen, Topline } from '../../../components/Shell';
+import { Grad, Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
-import { useChat } from '../../../lib/chat';
+import { DOCTOR_THREAD, useChat } from '../../../lib/chat';
+import { useClinic } from '../../../lib/clinic';
+import { addDays, hm, sameDay, today } from '../../../lib/dates';
 import { lastScores, scoreParts } from '../../../lib/demo';
 import { usePeople } from '../../../lib/people';
 import { useTheme } from '../../../theme/ThemeContext';
@@ -15,8 +17,14 @@ import { fonts, radius } from '../../../theme/tokens';
 
 type Sub = 'chat' | 'stats';
 
-// Чат с врачом (у врача — с пациентом) и показатели, из которых строится график прогресса.
-export default function ChatAndStats() {
+// Пациент и ухаживающий: чат с врачом и показатели, из которых строится график прогресса.
+// Врач: список чатов с пациентами, как в мессенджере, и переписка с выбранным.
+export default function ChatTab() {
+  const { profile } = useAuth();
+  return profile?.role === 'doctor' ? <DoctorChats /> : <ChatAndStats />;
+}
+
+function ChatAndStats() {
   const { c } = useTheme();
   const { profile } = useAuth();
   const people = usePeople();
@@ -24,11 +32,8 @@ export default function ChatAndStats() {
   const sub: Sub = params.sub === 'stats' ? 'stats' : 'chat';
   const setSub = (s: Sub) => router.setParams({ sub: s });
 
-  const doctor = profile?.role === 'doctor';
-  // Собеседник: у врача — пациент, у остальных — лечащий врач. Без связи — человек из макета.
-  const other = doctor
-    ? (people.patients[0]?.other_name ?? 'Алексей Петрович') + ', пациент'
-    : (people.doctor?.other_name ?? 'Ирина Соколова') + ', невролог';
+  // Собеседник — лечащий врач. Без связи — врач из макета.
+  const other = (people.doctor?.other_name ?? 'Ирина Соколова') + ', невролог';
 
   return (
     <TabScreen
@@ -42,7 +47,7 @@ export default function ChatAndStats() {
         </>
       }
     >
-      {sub === 'chat' ? <Chat other={other} doctor={doctor} /> : <Stats />}
+      {sub === 'chat' ? <Thread thread={DOCTOR_THREAD} other={other} placeholder="Сообщение врачу" /> : <Stats />}
     </TabScreen>
   );
 }
@@ -62,15 +67,27 @@ function SubTab({ on, color, onPress, badge, children }: { on: boolean; color: s
   );
 }
 
-function Chat({ other, doctor }: { other: string; doctor: boolean }) {
+// Время сообщения: сегодня — часы, вчера — «вчера», раньше — дата.
+function when(at?: number) {
+  if (!at) return '';
+  const d = new Date(at);
+  if (sameDay(d, today())) return hm(d);
+  if (sameDay(d, addDays(today(), -1))) return 'вчера';
+  return `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function Thread({ thread, other, placeholder }: { thread: string; other: string; placeholder: string }) {
   const { c } = useTheme();
-  const { messages, add } = useChat();
+  const chat = useChat();
   const brainy = useBrainy();
+  const messages = chat.messages(thread);
   const [text, setText] = useState('');
+  const { markRead } = chat;
+  useEffect(() => markRead(thread), [markRead, thread]);
   const send = () => {
     const t = text.trim();
     if (!t) return;
-    add({ mine: true, text: t });
+    chat.add(thread, { mine: true, text: t });
     setText('');
   };
   return (
@@ -81,11 +98,13 @@ function Chat({ other, doctor }: { other: string; doctor: boolean }) {
             <Grad key={i} style={[styles.bub, styles.me]}>
               <Text style={[styles.nm, { color: '#fff' }]}>{m.voice ? 'Вы · 🎙 надиктовано' : 'Вы'}</Text>
               <Text style={[styles.bubText, { color: '#fff' }]}>{m.text}</Text>
+              {m.at ? <Text style={[styles.time, { color: '#fff' }]}>{when(m.at)}</Text> : null}
             </Grad>
           ) : (
             <View key={i} style={[styles.bub, styles.them, { backgroundColor: c.pink }]}>
               <Text style={[styles.nm, { color: c.pinkInk }]}>{other}</Text>
               <Text style={[styles.bubText, { color: c.ink }]}>{m.text}</Text>
+              {m.at ? <Text style={[styles.time, { color: c.pinkInk }]}>{when(m.at)}</Text> : null}
             </View>
           ),
         )}
@@ -95,9 +114,9 @@ function Chat({ other, doctor }: { other: string; doctor: boolean }) {
           value={text}
           onChangeText={setText}
           onSubmitEditing={send}
-          placeholder={doctor ? 'Сообщение пациенту' : 'Сообщение врачу'}
+          placeholder={placeholder}
           placeholderTextColor={c.inkMute}
-          accessibilityLabel={doctor ? 'Сообщение пациенту' : 'Сообщение врачу'}
+          accessibilityLabel={placeholder}
           style={[styles.input, { borderColor: c.line, backgroundColor: c.surface, color: c.ink }]}
           returnKeyType="send"
         />
@@ -110,6 +129,104 @@ function Chat({ other, doctor }: { other: string; doctor: boolean }) {
       </View>
       <Text style={[styles.note, { color: c.inkMute }]}>Переписка пока демонстрационная и не сохраняется.</Text>
     </>
+  );
+}
+
+// ── врач: все чаты с пациентами ──────────────────────────
+function DoctorChats() {
+  const { c } = useTheme();
+  const clinic = useClinic();
+  const chat = useChat();
+  const params = useLocalSearchParams<{ with?: string }>();
+  const open = params.with ? clinic.patient(params.with) : undefined;
+
+  if (open) {
+    return (
+      <TabScreen
+        header={
+          <View style={styles.threadHead}>
+            <Pressable
+              onPress={() => (router.canGoBack() ? router.back() : router.setParams({ with: undefined }))}
+              accessibilityRole="button"
+              accessibilityLabel="Все чаты"
+              hitSlop={8}
+              style={[styles.iconBtn, { backgroundColor: c.pink2 }]}
+            >
+              <Icon name="back" color={c.pinkInk} size={22} />
+            </Pressable>
+            <View style={[styles.ava, { backgroundColor: c.pink }]}>
+              <Text style={[styles.avaText, { color: c.pinkInk }]}>{initials(open.name)}</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.rowName, { color: c.ink }]} numberOfLines={1}>{open.name}</Text>
+              <Text style={[styles.rowText, { color: c.inkMute }]}>{`${open.number} · ${open.week}-я неделя`}</Text>
+            </View>
+            <Pressable
+              onPress={() => router.push({ pathname: '/patient/[id]', params: { id: open.id } })}
+              accessibilityRole="button"
+              accessibilityLabel="Показатели пациента"
+              hitSlop={8}
+              style={[styles.iconBtn, { backgroundColor: c.pink2 }]}
+            >
+              <Icon name="stats" color={c.pinkInk} size={20} />
+            </Pressable>
+          </View>
+        }
+      >
+        <Thread thread={open.id} other={open.name} placeholder="Сообщение пациенту" />
+      </TabScreen>
+    );
+  }
+
+  // Сверху — где есть новые сообщения, затем по времени последнего сообщения.
+  const rows = clinic.patients
+    .map((p) => {
+      const list = chat.messages(p.id);
+      return { p, last: list[list.length - 1], unread: chat.unread(p.id) };
+    })
+    .sort((a, b) => (b.unread ? 1 : 0) - (a.unread ? 1 : 0) || (b.last?.at ?? 0) - (a.last?.at ?? 0));
+
+  return (
+    <TabScreen header={<PageHeader title="Чаты" />}>
+      {clinic.demo ? (
+        <Notice tone="info">Пока у вас нет подтверждённых пациентов — показан пример переписки.</Notice>
+      ) : null}
+      <View style={[styles.list, { backgroundColor: c.surface, borderColor: c.line }]}>
+        {rows.map(({ p, last, unread }, i) => (
+          <Pressable
+            key={p.id}
+            onPress={() => router.push({ pathname: '/chat', params: { with: p.id } })}
+            accessibilityRole="button"
+            accessibilityLabel={`${p.name}${unread ? `, новых сообщений: ${unread}` : ''}`}
+            style={({ pressed }) => [
+              styles.row,
+              i > 0 && { borderTopWidth: 1, borderTopColor: c.line },
+              { backgroundColor: pressed ? c.pink2 : 'transparent' },
+            ]}
+          >
+            <View style={[styles.ava, { backgroundColor: c.pink }]}>
+              <Text style={[styles.avaText, { color: c.pinkInk }]}>{initials(p.name)}</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={styles.rowTop}>
+                <Text style={[styles.rowName, { color: c.ink }]} numberOfLines={1}>{p.name}</Text>
+                <Text style={[styles.rowTime, { color: unread ? c.magenta : c.inkMute }]}>{when(last?.at)}</Text>
+              </View>
+              <View style={styles.rowTop}>
+                <Text style={[styles.rowText, { color: unread ? c.ink : c.inkMute }]} numberOfLines={1}>
+                  {last ? `${last.mine ? 'Вы: ' : ''}${last.text}` : 'Нет сообщений'}
+                </Text>
+                {unread ? (
+                  <View style={[styles.unread, { backgroundColor: c.magenta }]}>
+                    <Text style={styles.unreadText}>{unread}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </Pressable>
+        ))}
+      </View>
+    </TabScreen>
   );
 }
 
@@ -160,6 +277,20 @@ function Stats() {
 
 const styles = StyleSheet.create({
   tabs2: { flexDirection: 'row', gap: 9, paddingBottom: 10 },
+  threadHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4, paddingBottom: 10, minHeight: 58 },
+  iconBtn: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  list: { borderWidth: 1.5, borderRadius: radius.m, overflow: 'hidden' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 72 },
+  ava: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  avaText: { fontFamily: fonts.head700, fontSize: 15 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rowName: { flex: 1, fontFamily: fonts.body700, fontSize: 15 },
+  rowTime: { fontFamily: fonts.body600, fontSize: 12 },
+  rowText: { flex: 1, fontFamily: fonts.body500, fontSize: 13.5, marginTop: 3 },
+  unread: { minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
+    marginTop: 3 },
+  unreadText: { color: '#fff', fontFamily: fonts.body700, fontSize: 12 },
+  time: { fontFamily: fonts.body500, fontSize: 11, opacity: 0.7, marginTop: 4, alignSelf: 'flex-end' },
   subTab: { flex: 1, minHeight: 50, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 7 },
   subText: { fontFamily: fonts.head700, fontSize: 15 },

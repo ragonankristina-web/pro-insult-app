@@ -25,6 +25,12 @@ Expo SDK 58 · React Native · Expo Router · Supabase. Дизайн — по м
   По нажатию на график «Занятия» открывается календарь по месяцам (что сделано в каждый день, итоги месяца).
   Профиль с личным номером и связями — по нажатию на аватар. У врача на главном — список его пациентов.
   Данные занятий, оценок и чата пока демонстрационные (`src/lib/demo.ts`).
+- **Кабинет врача** (по макету «врач вкладки»): 5 вкладок — «Занятия», «Чаты», «Врач» (главная, большая кнопка
+  посередине), «Статистика», «Покупки». «Врач» — календарь всех занятий на месяц и карточки «Сегодня» / «Завтра».
+  «Чаты» — все пациенты списком, как в мессенджере, и переписка с каждым. «Занятия» — групповые и индивидуальные
+  занятия, назначение нового (`/session/new`) и «Библиотека упражнений» (`/library`). «Статистика» — мои пациенты
+  плиткой, по нажатию — показатели пациента (`/patient/[id]`). «Покупки» — кошелёк, операции, функции для работы.
+  Пациенты — по подтверждённым связям, пока их нет — пример; расписание, переписка и кошелёк — демо (`src/lib/clinic.tsx`).
 - **Захват движений — RTMPose** (OpenMMLab, Apache-2.0): модель RTMPose-m whole-body, 133 точки — тело, стопы,
   лицо, кисти с пальцами. Работает в браузере через ONNX Runtime Web на видеокарте (WebGPU), иначе на процессоре;
   кадры не покидают устройство. Модель (~70 МБ) — `public/models`, математика — `src/lib/rtmpose.ts`,
@@ -76,12 +82,12 @@ Supabase на чистую Ubuntu 24.04 одной командой (Docker, HTT
 
 ```
 src/app/(auth)/   welcome, phone, code, role, about
-src/app/(main)/   (tabs)/ home, lessons, chat, shop — разделы с нижним меню; profile — номер и связи;
-                  calendar; moto/ — «Моторика» (capture — захват движений); speech/ — «Речь»;
+src/app/(main)/   (tabs)/ home, lessons, chat, stats, shop — разделы с нижним меню (у врача — свои); profile — номер и связи;
+                  calendar; library; patient/[id]; session/new; moto/ — «Моторика» (capture — захват движений); speech/ — «Речь»;
                   think/ — «Мышление» (fruit — игра)
 src/components/   AuthScreen, ui (кнопки, поля, ввод кода), Icon, Shell (меню, заголовки), Brainy (ассистент), Charts,
                   DevLogin, PatientCamera, PoseCamera (RTMPose), HandCamera, useVoice (.web — общее распознавание речи в браузере)
-src/lib/          supabase, Auth (вход и регистрация), links, people (связи), dev, demo, chat, brainy (команды ассистента),
+src/lib/          supabase, Auth (вход и регистрация), links, people (связи), clinic (кабинет врача), dates, dev, demo, chat, brainy (команды ассистента),
                   exercises, fruitGame, mediapipe (лицо), rtmpose + rtmposeWeb (тело), validation
 src/theme/        цвета и шрифты из макета
 public/models/    модель RTMPose

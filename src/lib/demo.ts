@@ -5,10 +5,10 @@ export type Day = Record<Metric, number> & { done: number; date: Date };
 
 export const metricName: Record<Metric, string> = { moto: 'моторика', speech: 'речь', think: 'мышление' };
 
-// 8 недель оценок по видам реабилитации и сделанных занятий (из 3 в день); генератор с фиксированным зерном.
-// Последний день — сегодня, поэтому календарь показывает данные на настоящих датах.
-function makeDays(): Day[] {
-  let seed = 4417;
+// 8 недель оценок по видам реабилитации и сделанных занятий (из 3 в день); генератор с фиксированным зерном
+// (у каждого пациента в кабинете врача — своё). Последний день — сегодня, поэтому даты настоящие.
+export function makeDays(start = 4417): Day[] {
+  let seed = start;
   const r = () => {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
     return seed / 0x7fffffff;
@@ -69,12 +69,39 @@ export const lessonBlocks: LessonBlock[] = [
   },
 ];
 
-export type Message = { mine: boolean; text: string; voice?: boolean }; // voice — надиктовано через Брэйни
+export type Message = { mine: boolean; text: string; voice?: boolean; at?: number }; // voice — надиктовано через Брэйни; at — время, мс
 
 export const demoChat: Message[] = [
   { mine: false, text: 'Доброе утро! Вчера техника 91% — лучший результат за неделю. Продолжаем.' },
   { mine: true, text: 'Спасибо. К вечеру рука устаёт сильнее обычного.' },
   { mine: false, text: 'Тогда переносим моторику на утро, а речь оставим на вечер. Поменяла в плане.' },
+];
+
+// Переписки врача с пациентами (mine — сообщение врача); ago — сколько минут назад.
+const ago = (min: number) => Date.now() - min * 60_000;
+export const doctorThreads: Message[][] = [
+  [
+    { mine: true, text: 'Доброе утро! Вчера техника 91% — лучший результат за неделю. Продолжаем.', at: ago(26 * 60) },
+    { mine: false, text: 'Спасибо. К вечеру рука устаёт сильнее обычного.', at: ago(25 * 60) },
+    { mine: true, text: 'Тогда переносим моторику на утро, а речь оставим на вечер. Поменяла в плане.', at: ago(24 * 60) },
+    { mine: false, text: 'Хорошо. Сегодня сделал утром, рука меньше устала.', at: ago(38) },
+  ],
+  [
+    { mine: false, text: 'Здравствуйте! Не получается упражнение с языком, он уходит в сторону.', at: ago(3 * 60) },
+    { mine: true, text: 'Это нормально на этом этапе. Делайте перед зеркалом, медленно, 5 повторов вместо 8.', at: ago(2 * 60 + 40) },
+    { mine: false, text: 'Попробую, спасибо!', at: ago(2 * 60 + 35) },
+  ],
+  [
+    { mine: true, text: 'Как самочувствие после группового занятия?', at: ago(2 * 24 * 60) },
+    { mine: false, text: 'Устал, но понравилось. Можно чаще в группу?', at: ago(2 * 24 * 60 - 30) },
+  ],
+  [
+    { mine: false, text: 'Давление утром 150 на 90. Заниматься сегодня?', at: ago(95) },
+  ],
+  [
+    { mine: true, text: 'Отличная неделя — ни одного пропуска. Так держать!', at: ago(4 * 24 * 60) },
+    { mine: false, text: 'Спасибо, доктор 🙂', at: ago(4 * 24 * 60 - 10) },
+  ],
 ];
 
 export const lastScores: { metric: Metric; title: string; date: string; value: number }[] = [
@@ -105,4 +132,22 @@ export const doctors = [
 export const partners = [
   { icon: '🏥', title: 'КубГМУ', about: 'научное сопровождение программы реабилитации', kind: 'партнёр' },
   { icon: '🦾', title: 'Тренажёры для кисти', about: 'подбор по вашей программе, доставка', kind: 'реклама' },
+];
+
+// Кабинет врача: кошелёк (пример) и платные функции для работы.
+export const wallet = {
+  balance: '12 400 ₽',
+  plan: 'Врач',
+  operations: [
+    { title: 'Консультация — Смирнов А. П.', date: 'сегодня', sum: 1500 },
+    { title: 'Групповое занятие «Артикуляция»', date: 'вчера', sum: 4000 },
+    { title: 'Консультация — Орлова Г. И.', date: '3 дня назад', sum: 1500 },
+    { title: 'Тариф «Врач», месяц', date: '1-е число', sum: -990 },
+  ],
+};
+
+export const doctorFeatures = [
+  { icon: '📊', title: 'Расширенная аналитика', about: 'сравнение пациентов, отчёты для КубГМУ и выгрузка в PDF' },
+  { icon: '👥', title: 'Большие группы', about: 'групповые занятия до 20 пациентов' },
+  { icon: '🎥', title: 'Видеоконсультации', about: 'звонок пациенту прямо из чата' },
 ];

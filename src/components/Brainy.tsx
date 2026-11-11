@@ -1,13 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Speech from 'expo-speech';
-import { router, usePathname } from 'expo-router';
+import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../lib/Auth';
 import { findWake, isAgain, isNo, isYes, parse, tidyMessage, whenText } from '../lib/brainy';
-import { useChat } from '../lib/chat';
+import { DOCTOR_THREAD, useChat } from '../lib/chat';
+import { sessionsOn, useClinic } from '../lib/clinic';
+import { hm, today } from '../lib/dates';
 import { lessonBlocks } from '../lib/demo';
 import { speechExercises } from '../lib/exercises';
 import { useTheme } from '../theme/ThemeContext';
@@ -56,7 +58,7 @@ type Card =
 
 type Reminder = { id: number; at: number; what: string };
 
-const tabPaths = ['/home', '/lessons', '/chat', '/shop'];
+const tabPaths = ['/home', '/lessons', '/chat', '/stats', '/shop'];
 const KEY_WAKE = 'brainy.wake';
 const KEY_REMINDERS = 'brainy.reminders';
 
@@ -69,8 +71,12 @@ export function Brainy({ children }: { children: ReactNode }) {
   const path = usePathname();
   const { profile } = useAuth();
   const chat = useChat();
+  const clinic = useClinic();
   const doctor = profile?.role === 'doctor';
   const toWhom = doctor ? 'пациенту' : 'врачу';
+  // Куда писать: у пациента — лечащему врачу; у врача — в открытый сейчас чат с пациентом.
+  const params = useGlobalSearchParams<{ with?: string }>();
+  const thread = doctor ? (path === '/chat' && typeof params.with === 'string' ? params.with : null) : DOCTOR_THREAD;
 
   const [open, setOpen] = useState(false);
   const [reply, setReply] = useState('Здравствуйте! Я Брэйни. Чем помочь?');
@@ -134,7 +140,14 @@ export function Brainy({ children }: { children: ReactNode }) {
     if (to !== path) router.push(to as never);
   };
 
+  const noThread = () => {
+    setCard(null);
+    setAwaitMessage(false);
+    speak('Сначала откройте чат с пациентом — тогда я напишу ему.');
+    go('/chat');
+  };
   const draft = (text: string) => {
+    if (!thread) return noThread();
     const t = tidyMessage(text);
     setAwaitMessage(false);
     if (!t) return speak(`Что написать ${toWhom}? Говорите.`);
@@ -143,15 +156,16 @@ export function Brainy({ children }: { children: ReactNode }) {
   };
   const send = (text: string) => {
     const t = text.trim();
-    if (!t) return;
-    chat.add({ mine: true, text: t, voice: true });
+    if (!t || !thread) return;
+    chat.add(thread, { mine: true, text: t, voice: true });
     setCard(null);
     speak(`Отправил ${toWhom}.`);
     setOpen(false);
-    go('/chat');
+    if (!doctor) go('/chat');
   };
   const dictate = () => {
     setOpen(true);
+    if (!thread) return noThread();
     setCard(null);
     setAwaitMessage(true);
     speak(`Что написать ${toWhom}? Говорите.`);
@@ -196,6 +210,7 @@ export function Brainy({ children }: { children: ReactNode }) {
       }
       case 'write':
         if (it.text) return draft(it.text);
+        if (!thread) return noThread();
         setCard(null);
         setAwaitMessage(true);
         return speak(`Что написать ${toWhom}? Говорите.`);
@@ -207,6 +222,15 @@ export function Brainy({ children }: { children: ReactNode }) {
         setCard(null);
         return speak('Когда напомнить? Скажите, например: напомни в 18:00 или через 30 минут.');
       case 'today': {
+        if (doctor) {
+          const list = sessionsOn(clinic.sessions, today());
+          setCard(null);
+          return speak(
+            list.length
+              ? `Сегодня занятий: ${list.length}. Первое в ${hm(list[0].at)}: ${list[0].title}.`
+              : 'Сегодня занятий нет.',
+          );
+        }
         const all = lessonBlocks.flatMap((b) => b.lessons);
         const left = all.filter((l) => !l.done);
         setCard(null);

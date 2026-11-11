@@ -3,12 +3,12 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ProgressLine, Ring, WeekBars } from '../../../components/Charts';
-import { initials, Sect, TabScreen, Topline, useSoon } from '../../../components/Shell';
+import { DoctorHome } from '../../../components/DoctorHome';
+import { TabScreen, Topline } from '../../../components/Shell';
 import { Button, Notice } from '../../../components/ui';
 import { useAuth } from '../../../lib/Auth';
 import { days, metricName, perDay, type Metric } from '../../../lib/demo';
 import { usePeople } from '../../../lib/people';
-import type { Link } from '../../../lib/supabase';
 import { useTheme } from '../../../theme/ThemeContext';
 import { fonts, radius } from '../../../theme/tokens';
 
@@ -19,7 +19,7 @@ const segs: { m: Metric; label: string }[] = [
 ];
 
 // Главный: выполнение за сегодня, кнопка занятия, графики прогресса и занятий за неделю.
-// У врача сверху — список его пациентов.
+// У врача — своя главная «Врач» (DoctorHome): календарь занятий, сегодня и завтра.
 export default function Home() {
   const { c } = useTheme();
   const { profile } = useAuth();
@@ -33,48 +33,37 @@ export default function Home() {
   }
 
   const role = profile.role;
+  if (role === 'doctor') return <DoctorHome />;
   const patientName = people.patients[0]?.other_name;
-  const sub =
-    role === 'doctor'
-      ? `Врач · пациентов: ${people.patients.length}`
-      : role === 'caregiver'
-        ? `Помогаете: ${patientName ?? 'пациент не привязан'}`
-        : '4-я неделя реабилитации';
+  const sub = role === 'caregiver' ? `Помогаете: ${patientName ?? 'пациент не привязан'}` : '4-я неделя реабилитации';
 
   return (
     <TabScreen header={<Topline name={profile.full_name || 'Без имени'} sub={sub} />}>
-      {role === 'doctor' ? <DoctorPatients patients={people.patients} loading={people.loading} /> : null}
       {role === 'caregiver' && !patientName && !people.loading ? (
         <Notice tone="info">Привяжите подопечного по его номеру (#пац-…) в профиле. Пока показан пример данных.</Notice>
       ) : null}
 
-      {role !== 'doctor' ? (
-        <>
-          <View style={[styles.hero, { backgroundColor: c.pink }]}>
-            <Ring share={days[days.length - 1].done / perDay} caption={'выполнено\nзаданий сегодня'} />
-          </View>
-          <Button
-            title={role === 'caregiver' ? 'Открыть занятия' : 'Начать занятие'}
-            onPress={() => router.push('/lessons')}
-          />
-        </>
-      ) : (
-        <Sect>Прогресс пациента · пример</Sect>
-      )}
+      <View style={[styles.hero, { backgroundColor: c.pink }]}>
+        <Ring share={days[days.length - 1].done / perDay} caption={'выполнено\nзаданий сегодня'} />
+      </View>
+      <Button
+        title={role === 'caregiver' ? 'Открыть занятия' : 'Начать занятие'}
+        onPress={() => router.push('/lessons')}
+      />
 
-      <ChartsCard pinned={role !== 'doctor'} />
+      <ChartsCard />
     </TabScreen>
   );
 }
 
-// pinned — прижать к низу экрана, как в макете (у врача карточка идёт сразу за списком пациентов).
-function ChartsCard({ pinned }: { pinned: boolean }) {
+// Прижата к низу экрана, как в макете.
+function ChartsCard() {
   const { c } = useTheme();
   const [metric, setMetric] = useState<Metric>('moto');
   const week = days.slice(-7);
   const done = week.reduce((a, d) => a + d.done, 0);
   return (
-    <View style={[styles.charts, pinned && { marginTop: 'auto' }, { backgroundColor: c.pink }]}>
+    <View style={[styles.charts, { marginTop: 'auto', backgroundColor: c.pink }]}>
       <View style={[styles.box, { backgroundColor: c.surface }]}>
         <Pressable
           onPress={() => router.push({ pathname: '/chat', params: { sub: 'stats' } })}
@@ -122,42 +111,6 @@ function ChartsCard({ pinned }: { pinned: boolean }) {
   );
 }
 
-function DoctorPatients({ patients, loading }: { patients: Link[]; loading: boolean }) {
-  const { c } = useTheme();
-  const soon = useSoon();
-  return (
-    <View style={{ gap: 10 }}>
-      <Sect>Мои пациенты</Sect>
-      {loading ? <ActivityIndicator color={c.magenta} /> : null}
-      {!loading && !patients.length ? (
-        <View style={[styles.empty, { borderColor: c.line }]}>
-          <Text style={[styles.emptyText, { color: c.inkMute }]}>
-            Пока нет пациентов. Пациент отправляет запрос по вашему личному номеру — подтвердите его в профиле.
-          </Text>
-          <Button title="Открыть профиль" variant="soft" onPress={() => router.push('/profile')} />
-        </View>
-      ) : null}
-      {patients.map((p) => (
-        <Pressable
-          key={p.id}
-          onPress={() => soon('Карточка пациента: программа, оценки и чат — следующий этап.')}
-          accessibilityRole="button"
-          style={[styles.patient, { backgroundColor: c.pink2 }]}
-        >
-          <View style={[styles.pAva, { backgroundColor: c.surface }]}>
-            <Text style={[styles.pAvaText, { color: c.pinkInk }]}>{initials(p.other_name)}</Text>
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.pName, { color: c.ink }]} numberOfLines={1}>{p.other_name || 'Без имени'}</Text>
-            <Text style={[styles.pSub, { color: c.inkSoft }]}>{p.other_number}</Text>
-          </View>
-          <Text style={[styles.go, { color: c.magenta }]}>→</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hero: { borderRadius: radius.m, paddingVertical: 22, alignItems: 'center' },
@@ -170,12 +123,4 @@ const styles = StyleSheet.create({
   segText: { fontFamily: fonts.body700, fontSize: 11.5 },
   bignum: { fontFamily: fonts.head700, fontSize: 22, marginTop: 9, fontVariant: ['tabular-nums'] },
   bigSmall: { fontFamily: fonts.body600, fontSize: 12 },
-  empty: { borderWidth: 2, borderStyle: 'dashed', borderRadius: radius.m, padding: 16, gap: 12 },
-  emptyText: { fontFamily: fonts.body500, fontSize: 14, lineHeight: 20, textAlign: 'center' },
-  patient: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 17, padding: 13, minHeight: 66 },
-  pAva: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  pAvaText: { fontFamily: fonts.head700, fontSize: 14 },
-  pName: { fontFamily: fonts.body700, fontSize: 15 },
-  pSub: { fontFamily: fonts.body500, fontSize: 13, marginTop: 2 },
-  go: { fontFamily: fonts.body700, fontSize: 18 },
 });

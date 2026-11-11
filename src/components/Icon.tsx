@@ -26,6 +26,10 @@ const paths = {
   send: ['M5 12h14M13 6l6 6-6 6'],
   plus: ['M12 5v14M5 12h14'],
   shield: ['M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z', 'M8.5 12l2.5 2.5 4.5-5'],
+  stats: ['M3 21h18', 'M6 17v-5M11 17V7M16 17v-8M21 17V4'],
+  wallet: ['M3 7h17v13H3z', 'M3 7l12-4 2 4', 'M15 13.5h2.5'],
+  people: ['M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1', 'M16 3.5a4 4 0 0 1 0 7.5M19 14a6 6 0 0 1 3 5.2V21'],
+  book: ['M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z', 'M4 21.5V4.5', 'M20 19v3H6.5'],
 } as const;
 
 export type IconName = keyof typeof paths;
