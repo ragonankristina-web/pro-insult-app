@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { BrainyStage } from './BrainyStage';
 import { Icon } from './Icon';
 import { TabScreen, Topline } from './Shell';
 import { Grad, Notice } from './ui';
@@ -90,6 +91,7 @@ export function DoctorHome() {
         <DayCard title="Сегодня" list={sessionsOn(clinic.sessions, now)} />
         <DayCard title="Завтра" list={sessionsOn(clinic.sessions, tomorrow)} />
       </View>
+      <BrainyStage />
     </TabScreen>
   );
 }

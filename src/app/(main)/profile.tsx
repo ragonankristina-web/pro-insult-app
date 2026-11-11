@@ -73,7 +73,7 @@ export default function Profile() {
   return (
     <ScrollView
       style={{ backgroundColor: c.bg }}
-      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 110 }]}
+      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 140 }]}
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.inner}>

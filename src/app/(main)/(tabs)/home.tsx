@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ProgressLine, Ring, WeekBars } from '../../../components/Charts';
+import { BrainyStage } from '../../../components/BrainyStage';
 import { DoctorHome } from '../../../components/DoctorHome';
 import { TabScreen, Topline } from '../../../components/Shell';
 import { Button, Notice } from '../../../components/ui';
@@ -50,6 +51,9 @@ export default function Home() {
         title={role === 'caregiver' ? 'Открыть занятия' : 'Начать занятие'}
         onPress={() => router.push('/lessons')}
       />
+
+      {/* Свободное место посередине — под большого Брэйни. */}
+      <BrainyStage />
 
       <ChartsCard />
     </TabScreen>

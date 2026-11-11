@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrainyStage } from '../../../components/BrainyStage';
 import { BackHeader } from '../../../components/Shell';
 import { useTheme } from '../../../theme/ThemeContext';
 import { fonts, radius } from '../../../theme/tokens';
@@ -13,7 +14,7 @@ export default function Moto() {
   return (
     <ScrollView
       style={{ backgroundColor: c.bg }}
-      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 110 }]}
+      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 140 }]}
     >
       <View style={styles.inner}>
         <BackHeader title="Моторика" />
@@ -37,6 +38,7 @@ export default function Moto() {
         <Text style={[styles.note, { color: c.inkMute }]}>
           Упражнения с вашими видео-примерами появятся здесь, как в разделе «Речь».
         </Text>
+        <BrainyStage />
       </View>
     </ScrollView>
   );
@@ -44,7 +46,7 @@ export default function Moto() {
 
 const styles = StyleSheet.create({
   root: { flexGrow: 1, paddingHorizontal: 18 },
-  inner: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 14 },
+  inner: { flexGrow: 1, width: '100%', maxWidth: 520, alignSelf: 'center', gap: 14 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: radius.s, padding: 13, minHeight: 76 },
   pic: { width: 52, height: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   emoji: { fontSize: 26 },

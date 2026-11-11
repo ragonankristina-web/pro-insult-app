@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrainyStage } from '../../../components/BrainyStage';
 import { BackHeader } from '../../../components/Shell';
 import { fruitInfo } from '../../../lib/fruitGame';
 import { useTheme } from '../../../theme/ThemeContext';
@@ -14,7 +15,7 @@ export default function Think() {
   return (
     <ScrollView
       style={{ backgroundColor: c.bg }}
-      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 110 }]}
+      contentContainerStyle={[styles.root, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 140 }]}
     >
       <View style={styles.inner}>
         <BackHeader title="Мышление" />
@@ -35,6 +36,7 @@ export default function Think() {
           </View>
           <Text style={[styles.go, { color: c.magenta }]}>→</Text>
         </Pressable>
+        <BrainyStage />
       </View>
     </ScrollView>
   );
@@ -42,7 +44,7 @@ export default function Think() {
 
 const styles = StyleSheet.create({
   root: { flexGrow: 1, paddingHorizontal: 18 },
-  inner: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 14 },
+  inner: { flexGrow: 1, width: '100%', maxWidth: 520, alignSelf: 'center', gap: 14 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: radius.s, padding: 13, minHeight: 76 },
   pic: { width: 52, height: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center', padding: 6 },
   img: { width: '100%', height: '100%' },

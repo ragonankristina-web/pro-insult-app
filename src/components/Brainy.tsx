@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../lib/Auth';
 import { findWake, isAgain, isNo, isYes, moodOf, parse, tidyMessage, whenText } from '../lib/brainy';
-import { react, reacting, setTalking } from '../lib/brainyMood';
+import { react, reacting, setTalking, useStageActive } from '../lib/brainyMood';
 import { useChat } from '../lib/chat';
 import { say, stopSaying, voiceName, warmUpVoice } from '../lib/voice';
 import { sessionsOn, useClinic } from '../lib/clinic';
@@ -64,7 +64,8 @@ const tabPaths = ['/home', '/lessons', '/chat', '/stats', '/shop'];
 const KEY_WAKE = 'brainy.wake';
 const KEY_REMINDERS = 'brainy.reminders';
 
-const BrainyContext = createContext<{ dictate: () => void }>({ dictate: () => {} });
+// dictate — надиктовать сообщение в чат; show — открыть окно Брэйни (например, по нажатию на большого Брэйни).
+const BrainyContext = createContext<{ dictate: () => void; show: () => void }>({ dictate: () => {}, show: () => {} });
 export const useBrainy = () => useContext(BrainyContext);
 
 export function Brainy({ children }: { children: ReactNode }) {
@@ -76,6 +77,7 @@ export function Brainy({ children }: { children: ReactNode }) {
   const clinic = useClinic();
   const doctor = profile?.role === 'doctor';
   const toWhom = doctor ? 'пациенту' : 'врачу';
+  const stage = useStageActive();
   // Куда писать: у пациента — лечащему врачу; у врача — в открытый сейчас чат с пациентом.
   const params = useGlobalSearchParams<{ with?: string }>();
   const thread = doctor ? (path === '/chat' && typeof params.with === 'string' ? params.with : null) : chat.doctorThread;
@@ -333,7 +335,7 @@ export function Brainy({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <BrainyContext.Provider value={{ dictate }}>
+    <BrainyContext.Provider value={{ dictate, show: () => !open && toggle() }}>
       <View style={{ flex: 1 }}>
         {children}
         <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
@@ -341,12 +343,12 @@ export function Brainy({ children }: { children: ReactNode }) {
           <View pointerEvents="box-none" style={styles.layer}>
             {open ? (
               <View
-                style={[styles.panel, { bottom: base + 66, maxHeight: '78%', backgroundColor: c.surface, borderColor: c.line,
+                style={[styles.panel, { bottom: base + 76, maxHeight: '78%', backgroundColor: c.surface, borderColor: c.line,
                   shadowColor: c.shadow }]}
                 accessibilityViewIsModal
               >
                 <View style={styles.head}>
-                  <BrainyAvatar width={64} />
+                  <BrainyAvatar width={84} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.headName, { color: c.ink }]}>Брэйни</Text>
                     <Text style={[styles.headSub, { color: listening ? c.ok : c.inkMute }]} accessibilityLiveRegion="polite">
@@ -503,24 +505,26 @@ export function Brainy({ children }: { children: ReactNode }) {
               </View>
             ) : null}
 
-            <Pressable
-              onPress={toggle}
-              accessibilityRole="button"
-              accessibilityLabel={open ? 'Закрыть Брэйни' : 'Помощник Брэйни'}
-              style={[styles.bubble, { bottom: base }]}
-            >
-              {open ? (
-                // Окно открыто — сам Брэйни в окне, здесь только «закрыть».
-                <Grad style={[styles.dot, { shadowColor: c.shadow }]}>
-                  <Icon name="close" color="#fff" size={24} />
-                </Grad>
-              ) : (
-                <>
-                  <BrainyAvatar width={82} />
-                  {wake || listening ? (
-                    <View style={[styles.ear, { backgroundColor: c.ok, borderColor: c.surface }]}>
-                      <Icon name="mic" color="#fff" size={11} />
-                    </View>
+            {/* Большой Брэйни стоит посередине экрана (BrainyStage) — в углу его не дублируем. */}
+            {open || !stage ? (
+              <Pressable
+                onPress={toggle}
+                accessibilityRole="button"
+                accessibilityLabel={open ? 'Закрыть Брэйни' : 'Помощник Брэйни'}
+                style={[styles.bubble, { bottom: base }]}
+              >
+                {open ? (
+                  // Окно открыто — сам Брэйни в окне, здесь только «закрыть».
+                  <Grad style={[styles.dot, { shadowColor: c.shadow }]}>
+                    <Icon name="close" color="#fff" size={24} />
+                  </Grad>
+                ) : (
+                  <>
+                    <BrainyAvatar width={110} />
+                    {wake || listening ? (
+                      <View style={[styles.ear, { backgroundColor: c.ok, borderColor: c.surface }]}>
+                        <Icon name="mic" color="#fff" size={11} />
+                      </View>
                   ) : null}
                   <View style={[styles.name, { backgroundColor: c.surface, borderColor: c.line }]}>
                     <Text style={[styles.nameText, { color: c.inkSoft }]}>Брэйни</Text>
@@ -528,6 +532,7 @@ export function Brainy({ children }: { children: ReactNode }) {
                 </>
               )}
             </Pressable>
+            ) : null}
           </View>
         </View>
       </View>
@@ -567,7 +572,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, minWidth: 0, borderWidth: 1.5, borderRadius: radius.pill, paddingHorizontal: 14, minHeight: 48,
     fontFamily: fonts.body500, fontSize: 15, outlineWidth: 0 },
   roundBig: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  bubble: { position: 'absolute', right: 10, width: 90, alignItems: 'center' },
+  bubble: { position: 'absolute', right: 6, width: 118, alignItems: 'center' },
   dot: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center',
     shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 18, elevation: 8 },
   ear: { position: 'absolute', top: 2, right: 4, width: 22, height: 22, borderRadius: 11, borderWidth: 2,

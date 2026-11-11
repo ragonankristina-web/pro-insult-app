@@ -211,7 +211,7 @@ export function Sect({ children }: { children: ReactNode }) {
 const styles = StyleSheet.create({
   wrap: { width: '100%', maxWidth: 520, alignSelf: 'center', paddingHorizontal: 18 },
   scroll: { flexGrow: 1 },
-  content: { flexGrow: 1, gap: 14, paddingTop: 6, paddingBottom: 104 }, // снизу место под Брэйни
+  content: { flexGrow: 1, gap: 14, paddingTop: 6, paddingBottom: 136 }, // снизу место под Брэйни
   toast: { position: 'absolute', left: 0, right: 0, bottom: 104, alignItems: 'center', paddingHorizontal: 18 },
   toastInner: { width: '100%', maxWidth: 460 },
   nav: { borderTopWidth: 1, paddingTop: 9, paddingHorizontal: 12 },

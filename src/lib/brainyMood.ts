@@ -53,3 +53,24 @@ const snapshot = () => state;
 export function useMood() {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
+
+// Большой Брэйни посередине экрана (BrainyStage): пока он виден, маленький в углу прячется.
+let stages = 0;
+const stageListeners = new Set<() => void>();
+const stageChanged = () => stageListeners.forEach((l) => l());
+const stageSubscribe = (l: () => void) => {
+  stageListeners.add(l);
+  return () => stageListeners.delete(l);
+};
+
+export function stageOn() {
+  stages++;
+  stageChanged();
+}
+
+export function stageOff() {
+  stages--;
+  stageChanged();
+}
+
+export const useStageActive = () => useSyncExternalStore(stageSubscribe, () => stages > 0, () => false);
