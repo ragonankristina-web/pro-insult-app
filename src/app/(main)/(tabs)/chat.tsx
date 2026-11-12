@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useBrainy } from '../../../components/Brainy';
 import { Icon } from '../../../components/Icon';
@@ -12,7 +12,7 @@ import { useAuth } from '../../../lib/Auth';
 import { useChat } from '../../../lib/chat';
 import { useClinic } from '../../../lib/clinic';
 import { addDays, hm, monthsOf, sameDay, today } from '../../../lib/dates';
-import { lastScores, scoreParts } from '../../../lib/demo';
+import { lastScores, scoreParts, type Message } from '../../../lib/demo';
 import { usePeople } from '../../../lib/people';
 import { useTheme } from '../../../theme/ThemeContext';
 import { fonts, radius } from '../../../theme/tokens';
@@ -111,6 +111,9 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
   const [failed, setFailed] = useState<string | null>(null);
   const [mode, setMode] = useState<'voice' | 'video'>('voice');
   const [recording, setRecording] = useState(false);
+  const [menu, setMenu] = useState<Message | null>(null); // своё сообщение, по которому нажали
+  const [confirm, setConfirm] = useState(false); // «удалить?» — второй шаг меню
+  const [editing, setEditing] = useState<Message | null>(null); // исправляем это сообщение
   const { markRead } = chat;
   // Открыли переписку (или пришло новое сообщение, пока она открыта) — отмечаем прочитанным.
   useEffect(() => {
@@ -120,10 +123,31 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
     const t = text.trim();
     if (!t || sending) return;
     setSending(true);
-    const err = await chat.add(thread, { mine: true, text: t });
+    const err = editing ? await chat.edit(thread, editing.id, t) : await chat.add(thread, { mine: true, text: t });
     setSending(false);
     setFailed(err);
-    if (!err) setText('');
+    if (!err) {
+      setText('');
+      setEditing(null);
+    }
+  };
+  const closeMenu = () => {
+    setMenu(null);
+    setConfirm(false);
+  };
+  const startEdit = (m: Message) => {
+    closeMenu();
+    setEditing(m);
+    setText(m.text);
+  };
+  const cancelEdit = () => {
+    setEditing(null);
+    setText('');
+  };
+  const removeIt = async (m: Message) => {
+    closeMenu();
+    if (editing?.id === m.id) cancelEdit();
+    setFailed(await chat.remove(thread, m.id));
   };
   return (
     <>
@@ -139,7 +163,7 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
           const day = m.at ? dayLabel(m.at) : '';
           const newDay = Boolean(day) && (!prev?.at || dayLabel(prev.at) !== day);
           const sameSide = prev && prev.mine === m.mine && !newDay;
-          const meta = `${m.voice ? '🎙 ' : ''}${when(m.at)}${m.mine && real ? (m.read ? '  ✓✓' : '  ✓') : ''}`;
+          const meta = `${m.voice ? '🎙 ' : ''}${m.edited ? 'изменено · ' : ''}${when(m.at)}${m.mine && real ? (m.read ? '  ✓✓' : '  ✓') : ''}`;
           return (
             <View key={i}>
               {newDay ? (
@@ -152,12 +176,29 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
                 accessibilityLabel={`${m.mine ? 'Вы' : other}: ${m.text}${m.mine && real && m.read ? ', прочитано' : ''}`}
               >
                 {m.video ? (
-                  <VideoNote video={m.video} mine={m.mine} meta={meta.replace('🎙 ', '')} />
+                  <>
+                    {m.mine ? (
+                      // У кружка нажатие включает звук — меню открываем отдельной кнопкой.
+                      <Pressable onPress={() => setMenu(m)} accessibilityRole="button" accessibilityLabel="Действия с видеокружком"
+                        hitSlop={8} style={[styles.more, { backgroundColor: c.surface }]}>
+                        <Text style={[styles.moreText, { color: c.inkSoft }]}>⋯</Text>
+                      </Pressable>
+                    ) : null}
+                    <VideoNote video={m.video} mine={m.mine} meta={meta.replace('🎙 ', '')} />
+                  </>
                 ) : m.mine ? (
-                  <Grad style={[styles.bub, styles.me]}>
-                    <Text style={[styles.bubText, { color: '#fff' }]}>{m.text}</Text>
-                    {meta.trim() ? <Text style={[styles.meta, { color: 'rgba(255,255,255,0.85)' }]}>{meta}</Text> : null}
-                  </Grad>
+                  // Нажатие на своё сообщение — меню «Изменить / Удалить».
+                  <Pressable
+                    onPress={() => setMenu(m)}
+                    accessibilityRole="button"
+                    accessibilityHint="Открыть действия: изменить или удалить"
+                    style={({ pressed }) => [styles.bubWrap, { opacity: pressed ? 0.85 : 1 }]}
+                  >
+                    <Grad style={[styles.bub, styles.me, styles.full, editing?.id === m.id && styles.editingBub]}>
+                      <Text style={[styles.bubText, { color: '#fff' }]}>{m.text}</Text>
+                      {meta.trim() ? <Text style={[styles.meta, { color: 'rgba(255,255,255,0.85)' }]}>{meta}</Text> : null}
+                    </Grad>
+                  </Pressable>
                 ) : (
                   <View style={[styles.bub, styles.them, { backgroundColor: c.surface, borderColor: c.line }]}>
                     <Text style={[styles.bubText, { color: c.ink }]}>{m.text}</Text>
@@ -170,6 +211,16 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
         })}
         {!messages.length ? <View style={{ height: 40 }} /> : null}
       </View>
+      {editing ? (
+        <View style={[styles.editBar, { backgroundColor: c.surface, borderColor: c.magenta }]}>
+          <Text style={[styles.editTitle, { color: c.magenta }]}>✏️ Изменение сообщения</Text>
+          <Text style={[styles.editText, { color: c.inkSoft }]} numberOfLines={1}>{editing.text}</Text>
+          <Pressable onPress={cancelEdit} accessibilityRole="button" accessibilityLabel="Отменить изменение" hitSlop={10}
+            style={styles.editClose}>
+            <Icon name="close" color={c.inkMute} size={18} />
+          </Pressable>
+        </View>
+      ) : null}
       <View style={styles.composer}>
         {/* Переключатель, как в Telegram: голос (Брэйни) ↔ видеокружок. */}
         <View style={[styles.modes, { backgroundColor: c.pink2 }]} accessibilityRole="radiogroup" accessibilityLabel="Голос или видеокружок">
@@ -197,9 +248,11 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
           returnKeyType="send"
         />
         {text.trim() ? (
-          <Pressable onPress={send} disabled={sending} accessibilityRole="button" accessibilityLabel="Отправить"
-            accessibilityState={{ busy: sending }}>
-            <Grad style={[styles.sendBtn, sending && { opacity: 0.6 }]}><Icon name="send" color="#fff" size={20} /></Grad>
+          <Pressable onPress={send} disabled={sending} accessibilityRole="button"
+            accessibilityLabel={editing ? 'Сохранить исправление' : 'Отправить'} accessibilityState={{ busy: sending }}>
+            <Grad style={[styles.sendBtn, sending && { opacity: 0.6 }]}>
+              <Icon name={editing ? 'check' : 'send'} color="#fff" size={20} />
+            </Grad>
           </Pressable>
         ) : (
           // Поле пустое — кнопка делает то, что выбрано переключателем: диктовка Брэйни или видеокружок.
@@ -212,6 +265,42 @@ function Thread({ thread, other, placeholder }: { thread: string; other: string;
           </Pressable>
         )}
       </View>
+      {menu ? (
+        <Modal transparent animationType="fade" onRequestClose={closeMenu}>
+          <Pressable style={styles.menuBack} onPress={closeMenu} accessibilityLabel="Закрыть меню">
+            <Pressable style={[styles.menu, { backgroundColor: c.surface }]} onPress={() => {}}>
+              <Text style={[styles.menuText, { color: c.ink }]} numberOfLines={3}>{menu.video ? '🎥 Видеокружок' : menu.text}</Text>
+              {confirm ? (
+                <>
+                  <Text style={[styles.menuAsk, { color: c.inkSoft }]}>
+                    Удалить сообщение? Оно исчезнет и у вас, и у собеседника.
+                  </Text>
+                  <Pressable onPress={() => removeIt(menu)} accessibilityRole="button"
+                    style={[styles.menuBtn, { backgroundColor: c.errorBg }]}>
+                    <Text style={[styles.menuBtnText, { color: c.error }]}>Удалить</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  {!menu.video ? (
+                    <Pressable onPress={() => startEdit(menu)} accessibilityRole="button"
+                      style={[styles.menuBtn, { backgroundColor: c.pink2 }]}>
+                      <Text style={[styles.menuBtnText, { color: c.pinkInk }]}>✏️  Изменить</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable onPress={() => setConfirm(true)} accessibilityRole="button"
+                    style={[styles.menuBtn, { backgroundColor: c.errorBg }]}>
+                    <Text style={[styles.menuBtnText, { color: c.error }]}>🗑  Удалить</Text>
+                  </Pressable>
+                </>
+              )}
+              <Pressable onPress={closeMenu} accessibilityRole="button" style={styles.menuBtn}>
+                <Text style={[styles.menuBtnText, { color: c.inkSoft }]}>Отмена</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
       {recording ? (
         <VideoNoteRecorder onClose={() => setRecording(false)} onSend={(blob, mime, sec) => chat.sendVideo(thread, blob, mime, sec)} />
       ) : null}
@@ -388,6 +477,22 @@ const styles = StyleSheet.create({
     gap: 7 },
   subText: { fontFamily: fonts.head700, fontSize: 15 },
   badge: { width: 9, height: 9, borderRadius: 5 },
+  bubWrap: { maxWidth: '75%' },
+  full: { maxWidth: '100%' },
+  editingBub: { borderWidth: 2, borderColor: '#FFC93C' },
+  more: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 6,
+    alignSelf: 'center' },
+  moreText: { fontFamily: fonts.body700, fontSize: 18, lineHeight: 20 },
+  editBar: { borderLeftWidth: 4, borderRadius: 12, paddingVertical: 8, paddingLeft: 12, paddingRight: 40, marginTop: 4 },
+  editTitle: { fontFamily: fonts.body700, fontSize: 13 },
+  editText: { fontFamily: fonts.body500, fontSize: 13.5, marginTop: 2 },
+  editClose: { position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' },
+  menuBack: { flex: 1, backgroundColor: 'rgba(20,13,25,0.5)', justifyContent: 'flex-end', alignItems: 'center', padding: 16 },
+  menu: { width: '100%', maxWidth: 440, borderRadius: radius.m, padding: 14, gap: 8 },
+  menuText: { fontFamily: fonts.body600, fontSize: 15, lineHeight: 21, paddingHorizontal: 4, paddingBottom: 4 },
+  menuAsk: { fontFamily: fonts.body500, fontSize: 14, lineHeight: 20, paddingHorizontal: 4 },
+  menuBtn: { minHeight: 52, borderRadius: radius.s, alignItems: 'center', justifyContent: 'center' },
+  menuBtnText: { fontFamily: fonts.body700, fontSize: 16 },
   room: { borderRadius: radius.m, paddingHorizontal: 10, paddingTop: 4, paddingBottom: 12 },
   line: { flexDirection: 'row' },
   bub: { maxWidth: '75%', paddingHorizontal: 13, paddingTop: 9, paddingBottom: 6, borderRadius: 18 },

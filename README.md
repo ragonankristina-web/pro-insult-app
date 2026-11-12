@@ -100,6 +100,7 @@ src/lib/          supabase, Auth (вход и регистрация), links, pe
                   exercises, fruitGame, mediapipe (лицо), rtmpose + rtmposeWeb (тело), validation
 src/theme/        цвета и шрифты из макета
 public/models/    модели RTMPose и голоса «Руслан» (Piper)
-supabase/         schema.sql, chat.sql (сообщения), video-notes.sql (видеокружки), sms-hook.sql
+supabase/         schema.sql, chat.sql (сообщения), video-notes.sql (видеокружки), chat-edit.sql (исправить/удалить),
+                  sms-hook.sql
 infra/server/     установка собственного сервера (на будущее)
 ```

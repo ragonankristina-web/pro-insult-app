@@ -72,12 +72,14 @@ export const lessonBlocks: LessonBlock[] = [
 // voice — надиктовано через Брэйни; at — время, мс; read — собеседник прочитал (для своих сообщений);
 // video — видеокружок: path в хранилище (настоящий чат) или url на устройстве (пример переписки).
 export type Message = {
+  id?: number | string; // в базе — id сообщения; в примере переписки — его место в списке
   mine: boolean;
   text: string;
   voice?: boolean;
   at?: number;
   read?: boolean;
   video?: { path?: string; url?: string; seconds: number };
+  edited?: boolean; // исправлено после отправки
 };
 
 export const demoChat: Message[] = [

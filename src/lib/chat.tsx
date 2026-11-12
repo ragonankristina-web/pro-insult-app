@@ -23,6 +23,8 @@ type Row = {
   kind?: 'text' | 'video'; // столбцы видеокружков — после supabase/video-notes.sql
   media_path?: string | null;
   seconds?: number | null;
+  edited_at?: string | null; // исправление и удаление — после supabase/chat-edit.sql
+  deleted_at?: string | null;
 };
 
 type Chat = {
@@ -33,13 +35,16 @@ type Chat = {
   messages: (thread: string) => Message[];
   add: (thread: string, m: Message) => Promise<string | null>; // текст ошибки или null
   sendVideo: (thread: string, blob: Blob, mime: string, seconds: number) => Promise<string | null>;
+  edit: (thread: string, id: Message['id'], text: string) => Promise<string | null>; // своё текстовое
+  remove: (thread: string, id: Message['id']) => Promise<string | null>; // своё — удаляется у обоих
   unread: (thread: string) => number; // сколько сообщений собеседника ещё не открыто
   markRead: (thread: string) => void;
 };
 
 const ChatContext = createContext<Chat>({
   doctorThread: DOCTOR_THREAD, isReal: () => false, ready: true, error: null,
-  messages: () => [], add: async () => null, sendVideo: async () => null, unread: () => 0, markRead: () => {},
+  messages: () => [], add: async () => null, sendVideo: async () => null, edit: async () => null,
+  remove: async () => null, unread: () => 0, markRead: () => {},
 });
 export const useChat = () => useContext(ChatContext);
 
@@ -60,6 +65,8 @@ function cleanError(m: string) {
   if (/bucket not found|column .*(kind|media_path|seconds)|messages_kind/i.test(m))
     return 'Видеокружки ещё не включены в базе: выполните supabase/video-notes.sql.';
   if (/exceeded|too large|payload/i.test(m)) return 'Видео слишком большое — запишите покороче.';
+  if (/(edit|delete)_message|edited_at|deleted_at/i.test(m))
+    return 'Исправление и удаление ещё не включены в базе: выполните supabase/chat-edit.sql.';
   return m.replace(/^ERROR:\s*/i, '');
 }
 
@@ -106,15 +113,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const byThread = useMemo(() => {
     const out: Record<string, Message[]> = {};
     for (const r of rows) {
+      if (r.deleted_at) continue; // удалённое не показываем ни у кого
       const other = r.sender_id === me ? r.recipient_id : r.sender_id;
       const mine = r.sender_id === me;
       (out[other] ??= []).push({
+        id: r.id,
         mine,
         text: r.body,
         voice: r.voice,
         at: Date.parse(r.created_at),
         read: mine && Boolean(r.read_at),
         video: r.kind === 'video' && r.media_path ? { path: r.media_path, seconds: r.seconds ?? 0 } : undefined,
+        edited: Boolean(r.edited_at),
       });
     }
     return out;
@@ -130,9 +140,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const isReal = useCallback((thread: string) => backendConfigured && uuid.test(thread), []);
 
+  // В примере переписки id сообщения — его место в списке.
+  const demoList = useCallback(
+    (thread: string) => (demo[thread] ?? start(thread)).map((m, i) => ({ ...m, id: `d${i}` })),
+    [demo, start],
+  );
+
   const messages = useCallback(
-    (thread: string) => (isReal(thread) ? byThread[thread] ?? [] : demo[thread] ?? start(thread)),
-    [isReal, byThread, demo, start],
+    (thread: string) => (isReal(thread) ? byThread[thread] ?? [] : demoList(thread)),
+    [isReal, byThread, demoList],
   );
 
   const add = useCallback(
@@ -181,9 +197,51 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [isReal, start, me],
   );
 
+  const edit = useCallback(
+    async (thread: string, id: Message['id'], text: string) => {
+      const t = text.trim();
+      if (!t) return 'Сообщение не может быть пустым';
+      if (!isReal(thread)) {
+        const i = Number(String(id).slice(1));
+        setDemo((all) => {
+          const list = [...(all[thread] ?? start(thread))];
+          list[i] = { ...list[i], text: t, edited: true };
+          return { ...all, [thread]: list };
+        });
+        return null;
+      }
+      const { error: e } = await supabase.rpc('edit_message', { p_id: id, p_body: t });
+      if (e) return cleanError(e.message);
+      const now = new Date().toISOString();
+      setRows((list) => list.map((r) => (r.id === id ? { ...r, body: t, edited_at: now } : r)));
+      return null;
+    },
+    [isReal, start],
+  );
+
+  const remove = useCallback(
+    async (thread: string, id: Message['id']) => {
+      if (!isReal(thread)) {
+        const i = Number(String(id).slice(1));
+        setDemo((all) => ({ ...all, [thread]: (all[thread] ?? start(thread)).filter((_, k) => k !== i) }));
+        return null;
+      }
+      const { data, error: e } = await supabase.rpc('delete_message', { p_id: id });
+      if (e) return cleanError(e.message);
+      // Кружок — удаляем и сам файл из хранилища.
+      if (typeof data === 'string' && data) await supabase.storage.from('video-notes').remove([data]);
+      const now = new Date().toISOString();
+      setRows((list) => list.map((r) => (r.id === id ? { ...r, body: '', deleted_at: now } : r)));
+      return null;
+    },
+    [isReal, start],
+  );
+
   const unread = useCallback(
     (thread: string) => {
-      if (isReal(thread)) return rows.filter((r) => r.sender_id === thread && r.recipient_id === me && !r.read_at).length;
+      if (isReal(thread)) {
+        return rows.filter((r) => r.sender_id === thread && r.recipient_id === me && !r.read_at && !r.deleted_at).length;
+      }
       if (demoRead[thread]) return 0;
       const list = demo[thread] ?? start(thread);
       let n = 0;
@@ -208,7 +266,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <ChatContext.Provider value={{ doctorThread, isReal, ready, error, messages, add, sendVideo, unread, markRead }}>
+    <ChatContext.Provider value={{ doctorThread, isReal, ready, error, messages, add, sendVideo, edit, remove, unread, markRead }}>
       {children}
     </ChatContext.Provider>
   );
