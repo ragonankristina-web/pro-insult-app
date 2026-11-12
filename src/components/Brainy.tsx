@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/Auth';
 import { findWake, isAgain, isNo, isYes, moodOf, parse, tidyMessage, whenText } from '../lib/brainy';
 import { react, reacting, setTalking, touch, useStageActive } from '../lib/brainyMood';
+import { aiTrouble, askBrainy, type Turn } from '../lib/brainyAi';
 import { useChat } from '../lib/chat';
 import { say, stopSaying, voiceName, warmUpVoice } from '../lib/voice';
 import { sessionsOn, useClinic } from '../lib/clinic';
@@ -86,7 +87,9 @@ export function Brainy({ children }: { children: ReactNode }) {
   const [reply, setReply] = useState('Здравствуйте! Я Брэйни. Чем помочь?');
   const [card, setCard] = useState<Card | null>(null);
   const [awaitMessage, setAwaitMessage] = useState(false);
-  const [mic, setMic] = useState(false); // одна фраза без обращения по имени (нажали 🎙)
+  const [mic, setMic] = useState(false); // одна фраза без обращения по имени (нажали 🎙 или идёт разговор)
+  const [history, setHistory] = useState<Turn[]>([]); // разговор с ИИ: последние реплики
+  const [thinking, setThinking] = useState(false);
   const [wake, setWake] = useState(false); // слушать обращение «Брэйни» постоянно
   const [input, setInput] = useState('');
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -241,7 +244,7 @@ export function Brainy({ children }: { children: ReactNode }) {
         setAwaitMessage(true);
         return speak(`Что написать ${toWhom}? Говорите.`);
       case 'remind':
-        saveReminders([...reminders, { id: Date.now(), at: it.at.getTime(), what: it.what }].sort((a, b) => a.at - b.at));
+        saveReminders([...reminders, { id: it.at.getTime() + reminders.length, at: it.at.getTime(), what: it.what }].sort((a, b) => a.at - b.at));
         setCard(null);
         return speak(`Хорошо. Напомню ${whenText(it.at)}: ${it.what}.`);
       case 'remindAsk':
@@ -272,15 +275,51 @@ export function Brainy({ children }: { children: ReactNode }) {
       case 'stop':
         stopSaying();
         setCard(null);
+        setHistory([]);
         return setOpen(false);
       case 'emergency':
         setCard({ kind: 'emergency', write: it.write });
         return speak('Если внезапно перекосило лицо, ослабли рука или нога или нарушилась речь — срочно звоните 103.');
       default:
-        setCard({ kind: 'help' });
-        return speak('Я не понял. Вот что я умею.');
+        return converse(text);
     }
   };
+
+  // Не команда — разговор: отвечает ИИ (GigaChat через функцию brainy-chat). После ответа Брэйни сам слушает
+  // следующую фразу — можно продолжать без «Брэйни». ИИ не подключён — подсказывает, что умеет.
+  const converse = async (text: string) => {
+    setCard(null);
+    setThinking(true);
+    setReply('…');
+    const turns: Turn[] = [...history, { role: 'user' as const, content: text }].slice(-12);
+    setHistory(turns);
+    const role = profile?.role;
+    const ans = await askBrainy(turns, {
+      name: (profile?.full_name ?? '').trim().split(/\s+/).slice(0, 2).join(' ') || undefined,
+      role,
+      week: role === 'patient' ? '4-я неделя' : undefined,
+      left: role === 'doctor' ? undefined : lessonBlocks.flatMap((b) => b.lessons).filter((l) => !l.done).map((l) => l.title),
+    });
+    setThinking(false);
+    if ('reply' in ans) {
+      setHistory((h) => [...h, { role: 'assistant' as const, content: ans.reply }].slice(-12));
+      speak(ans.reply);
+      if (voice.supported) setMic(true);
+      return;
+    }
+    if (ans.error === 'off') {
+      setCard({ kind: 'help' });
+      return speak('Я не понял. Вот что я умею.');
+    }
+    speak(aiTrouble[ans.error]);
+  };
+
+  // Слушаем без обращения по имени не дольше 25 секунд тишины.
+  useEffect(() => {
+    if (!mic) return;
+    const t = setTimeout(() => setMic(false), 25_000);
+    return () => clearTimeout(t);
+  }, [mic]);
 
   // Без обращения по имени слушаем, только когда Брэйни ждёт ответа: текст сообщения, «отправить» или нажат 🎙.
   const direct = mic || awaitMessage || card?.kind === 'draft';
@@ -321,7 +360,9 @@ export function Brainy({ children }: { children: ReactNode }) {
   };
 
   const listening = voice.supported && !voice.denied && (direct || (wake && open));
-  const status = !voice.supported
+  const status = thinking
+    ? 'Думаю…'
+    : !voice.supported
     ? 'Пишите вопрос ниже'
     : voice.denied
       ? 'Нет доступа к микрофону'
@@ -335,6 +376,7 @@ export function Brainy({ children }: { children: ReactNode }) {
 
   const base = insets.bottom + (tabPaths.includes(path) ? 90 : 16);
   const chips = [
+    'Давай поболтаем',
     'Что на сегодня?',
     here ? 'Как делать это упражнение?' : 'Как делать трубочку?',
     `Написать ${toWhom}`,
