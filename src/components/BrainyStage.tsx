@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { useBrainy } from './Brainy';
 import { BRAINY_RATIO, BrainyAvatar } from './BrainyAvatar';
@@ -59,4 +59,44 @@ const styles = StyleSheet.create({
   stage: { flex: 1, minHeight: 0, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   press: { alignItems: 'center' },
   hint: { fontFamily: fonts.body600, fontSize: 12.5, marginTop: 2, textAlign: 'center' },
+  spot: { position: 'absolute', zIndex: 5, alignItems: 'center', justifyContent: 'center' },
 });
+
+// Брэйни поверх карточки, в её свободной части: ничего не раздвигает и не смещает (position: absolute).
+// style — прямоугольник свободного места внутри родителя (родитель — карточка с position: relative).
+export function BrainySpot({ style }: { style: StyleProp<ViewStyle> }) {
+  const brainy = useBrainy();
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const width = Math.min(240, box.w, box.h / BRAINY_RATIO);
+  const fits = width >= 70;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!fits) return;
+      stageOn();
+      return stageOff;
+    }, [fits]),
+  );
+
+  return (
+    <View
+      pointerEvents="box-none"
+      style={[styles.spot, style]}
+      onLayout={(e) => {
+        const { width: w, height: h } = e.nativeEvent.layout;
+        setBox((b) => (Math.abs(b.w - w) < 1 && Math.abs(b.h - h) < 1 ? b : { w, h }));
+      }}
+    >
+      {fits ? (
+        <Pressable
+          onPress={brainy.show}
+          accessibilityRole="button"
+          accessibilityLabel="Брэйни — нажмите, чтобы спросить"
+          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+        >
+          <BrainyAvatar width={width} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}

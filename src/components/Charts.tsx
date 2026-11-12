@@ -40,7 +40,8 @@ const W = 150;
 const H = 76;
 const P = 4;
 
-export function ProgressLine({ data, metric }: { data: Day[]; metric: Metric }) {
+// height — задать высоту графика (иначе — по ширине, в пропорции W:H).
+export function ProgressLine({ data, metric, height }: { data: Day[]; metric: Metric; height?: number }) {
   const { c } = useTheme();
   const v = data.map((d) => d[metric]);
   const lo = Math.floor((Math.min(...v) - 4) / 5) * 5;
@@ -50,7 +51,7 @@ export function ProgressLine({ data, metric }: { data: Day[]; metric: Metric }) 
   const d = v.map((n, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(n).toFixed(1)}`).join(' ');
   const last = v.length - 1;
   return (
-    <Svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={styles.chart}>
+    <Svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={[styles.chart, height ? { aspectRatio: undefined, height } : null]}>
       <Defs>
         <LinearGradient id="lineStroke" x1="0" y1="0" x2="1" y2="0">
           <Stop offset="0" stopColor={c.g1} />
@@ -70,14 +71,14 @@ export function ProgressLine({ data, metric }: { data: Day[]; metric: Metric }) 
 
 const DAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']; // по Date.getDay()
 
-export function WeekBars({ week, perDay }: { week: Day[]; perDay: number }) {
+export function WeekBars({ week, perDay, height }: { week: Day[]; perDay: number; height?: number }) {
   const { c } = useTheme();
   const n = week.length;
   const slot = (W - 2 * P) / n;
   const bw = slot * 0.6;
   return (
     <View>
-      <Svg viewBox={`0 0 ${W} ${H - 9}`} preserveAspectRatio="none" style={[styles.chart, { aspectRatio: W / (H - 9) }]}>
+      <Svg viewBox={`0 0 ${W} ${H - 9}`} preserveAspectRatio="none" style={[styles.chart, height ? { height } : { aspectRatio: W / (H - 9) }]}>
         <Defs>
           <LinearGradient id="barGrad" x1="0" y1="1" x2="0" y2="0">
             <Stop offset="0" stopColor={c.g1} />
