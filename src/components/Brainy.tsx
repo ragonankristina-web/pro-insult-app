@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useGlobalSearchParams, usePathname } from 'expo-router';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../lib/Auth';
@@ -88,8 +88,9 @@ export function Brainy({ children }: { children: ReactNode }) {
   const [card, setCard] = useState<Card | null>(null);
   const [awaitMessage, setAwaitMessage] = useState(false);
   const [mic, setMic] = useState(false); // одна фраза без обращения по имени (нажали 🎙 или идёт разговор)
-  const [history, setHistory] = useState<Turn[]>([]); // разговор с ИИ: последние реплики
+  const [history, setHistory] = useState<Turn[]>([]); // беседа: реплики пациента и Брэйни (последние 30)
   const [thinking, setThinking] = useState(false);
+  const scroll = useRef<ScrollViewInstance>(null);
   const [wake, setWake] = useState(false); // слушать обращение «Брэйни» постоянно
   const [input, setInput] = useState('');
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -123,8 +124,9 @@ export function Brainy({ children }: { children: ReactNode }) {
   // Говорит медленно — пациентам после инсульта так легче воспринимать. Пока говорит, микрофон не слушает.
   // В браузере — голосом «Руслан» (lib/voice.web.ts); вызов из нажатия заодно разрешает браузеру звук.
   // Пока говорит — анимация разговора; если в словах есть чувство («Отлично!», «Я не понял») — эта эмоция.
-  const speak = useCallback((text: string) => {
+  const speak = useCallback((text: string, log = true) => {
     setReply(text);
+    if (log) setHistory((h) => [...h, { role: 'assistant' as const, content: text }].slice(-30));
     warmUpVoice();
     setVoiceMuted(true);
     const felt = moodOf(text);
@@ -201,6 +203,7 @@ export function Brainy({ children }: { children: ReactNode }) {
     const text = raw.trim();
     if (!text) return;
     setOpen(true);
+    setHistory((h) => [...h, { role: 'user' as const, content: text }].slice(-30));
     // Брэйни сопереживает тому, что сказал пациент: радуется «спасибо», грустит от «мне плохо».
     const felt = moodOf(text);
     if (felt) react(felt);
@@ -290,9 +293,8 @@ export function Brainy({ children }: { children: ReactNode }) {
   const converse = async (text: string) => {
     setCard(null);
     setThinking(true);
-    setReply('…');
+    // ИИ получает последние реплики беседы (вместе с ответами на команды — так ему понятнее контекст).
     const turns: Turn[] = [...history, { role: 'user' as const, content: text }].slice(-12);
-    setHistory(turns);
     const role = profile?.role;
     const ans = await askBrainy(turns, {
       name: (profile?.full_name ?? '').trim().split(/\s+/).slice(0, 2).join(' ') || undefined,
@@ -302,7 +304,6 @@ export function Brainy({ children }: { children: ReactNode }) {
     });
     setThinking(false);
     if ('reply' in ans) {
-      setHistory((h) => [...h, { role: 'assistant' as const, content: ans.reply }].slice(-12));
       speak(ans.reply);
       if (voice.supported) setMic(true);
       return;
@@ -411,14 +412,36 @@ export function Brainy({ children }: { children: ReactNode }) {
                   </Pressable>
                 </View>
 
-                <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-                  <View style={[styles.say, { backgroundColor: c.pink2 }]}>
-                    <Text style={[styles.sayText, { color: c.ink }]} accessibilityLiveRegion="polite">{reply}</Text>
-                    <Pressable onPress={() => speak(reply)} accessibilityRole="button" accessibilityLabel="Повторить вслух"
-                      hitSlop={6} style={styles.repeat}>
-                      <Text style={{ fontSize: 18 }}>🔊</Text>
-                    </Pressable>
-                  </View>
+                <ScrollView
+                  ref={scroll}
+                  style={{ flexShrink: 1 }}
+                  contentContainerStyle={styles.body}
+                  keyboardShouldPersistTaps="handled"
+                  onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
+                >
+                  {/* Беседа, как в мессенджере: Брэйни слева, вы справа. */}
+                  {(history.length ? history : [{ role: 'assistant' as const, content: reply }]).map((t, i, all) =>
+                    t.role === 'user' ? (
+                      <View key={i} style={[styles.say, styles.mine, { backgroundColor: c.magenta }]}>
+                        <Text style={[styles.sayText, { color: '#fff' }]}>{t.content}</Text>
+                      </View>
+                    ) : (
+                      <View key={i} style={[styles.say, styles.his, { backgroundColor: c.pink2 }]}>
+                        <Text style={[styles.sayText, { color: c.ink }]} accessibilityLiveRegion="polite">{t.content}</Text>
+                        {i === all.length - 1 ? (
+                          <Pressable onPress={() => speak(t.content, false)} accessibilityRole="button"
+                            accessibilityLabel="Повторить вслух" hitSlop={6} style={styles.repeat}>
+                            <Text style={{ fontSize: 16 }}>🔊</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    ),
+                  )}
+                  {thinking ? (
+                    <View style={[styles.say, styles.his, { backgroundColor: c.pink2 }]}>
+                      <Text style={[styles.sayText, { color: c.inkMute }]}>Брэйни думает…</Text>
+                    </View>
+                  ) : null}
                   {listening && voice.heard ? (
                     <Text style={[styles.heard, { color: c.inkSoft }]}>{`Вы: «${voice.heard}»`}</Text>
                   ) : null}
@@ -600,9 +623,11 @@ const styles = StyleSheet.create({
   headSub: { fontFamily: fonts.body600, fontSize: 12.5, marginTop: 1 },
   round: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   body: { paddingHorizontal: 14, paddingBottom: 12, gap: 10 },
-  say: { borderRadius: radius.s, padding: 14, paddingRight: 44 },
-  sayText: { fontFamily: fonts.body600, fontSize: 17, lineHeight: 24 },
-  repeat: { position: 'absolute', right: 10, top: 10 },
+  say: { maxWidth: '86%', borderRadius: 18, paddingVertical: 10, paddingHorizontal: 14 },
+  his: { alignSelf: 'flex-start', borderBottomLeftRadius: 5, paddingRight: 38 },
+  mine: { alignSelf: 'flex-end', borderBottomRightRadius: 5 },
+  sayText: { fontFamily: fonts.body600, fontSize: 16.5, lineHeight: 23 },
+  repeat: { position: 'absolute', right: 8, top: 8 },
   heard: { fontFamily: fonts.body500, fontSize: 14, fontStyle: 'italic' },
   card: { borderWidth: 1.5, borderRadius: radius.s, padding: 14, gap: 9 },
   cardTitle: { fontFamily: fonts.head700, fontSize: 16 },
