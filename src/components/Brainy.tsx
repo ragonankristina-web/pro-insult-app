@@ -1,12 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../lib/Auth';
 import { findWake, isAgain, isNo, isYes, moodOf, parse, tidyMessage, whenText } from '../lib/brainy';
-import { react, reacting, setTalking, useStageActive } from '../lib/brainyMood';
+import { react, reacting, setTalking, touch, useStageActive } from '../lib/brainyMood';
 import { useChat } from '../lib/chat';
 import { say, stopSaying, voiceName, warmUpVoice } from '../lib/voice';
 import { sessionsOn, useClinic } from '../lib/clinic';
@@ -90,6 +90,14 @@ export function Brainy({ children }: { children: ReactNode }) {
   const [wake, setWake] = useState(false); // слушать обращение «Брэйни» постоянно
   const [input, setInput] = useState('');
   const [reminders, setReminders] = useState<Reminder[]>([]);
+
+  // Любое действие в приложении — Брэйни не уснёт, а спящий проснётся.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    return () => events.forEach((e) => window.removeEventListener(e, touch));
+  }, []);
 
   // Настройки и напоминания переживают перезапуск приложения.
   useEffect(() => {
@@ -336,7 +344,7 @@ export function Brainy({ children }: { children: ReactNode }) {
 
   return (
     <BrainyContext.Provider value={{ dictate, show: () => !open && toggle() }}>
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1 }} onTouchStart={touch}>
         {children}
         <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           {open ? <Pressable onPress={toggle} accessibilityLabel="Закрыть Брэйни" style={styles.backdrop} /> : null}
